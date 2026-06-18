@@ -1,0 +1,161 @@
+const SHEET_NAME = "Ryan-Credit Card";
+const SPREADSHEET_NAME = "RyCo budget";
+
+// ─── Main function (runs every 5 minutes via trigger) ─────────────────────────
+
+function checkEmails() {
+  const threads = GmailApp.search('from:no-reply@discovery.bank is:unread subject:"Transaction update"');
+
+  threads.forEach(thread => {
+    const messages = thread.getMessages();
+    messages.forEach(message => {
+      if (message.isUnread()) {
+        const body = message.getPlainBody();
+        const emailDate = message.getDate();
+
+        let transaction = null;
+
+        if (body.includes("Card payment")) {
+          transaction = parseDiscoveryEmail(body, emailDate);
+        } else if (body.includes("Discovery Pay")) {
+          transaction = parseDiscoveryEFT(body, emailDate);
+        } else if (body.includes("Incoming payment")) {
+          transaction = parseIncomingPayment(body, emailDate);
+        } else {
+          message.markRead();
+          return;
+        }
+
+        if (transaction) {
+          if (!isDuplicate(transaction)) {
+            writeToSheet(transaction);
+            Logger.log("Written: " + JSON.stringify(transaction));
+          } else {
+            Logger.log("Duplicate skipped: " + transaction.vendor);
+          }
+        }
+
+        message.markRead();
+      }
+    });
+  });
+}
+
+// ─── Parsers ──────────────────────────────────────────────────────────────────
+
+function parseDiscoveryEmail(body, emailDate) {
+  const date = Utilities.formatDate(emailDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  const vendorMatch = body.match(/([^\n]+?)\s+[–-]\s+(R|ZAR|USD|EUR|GBP)\s+([\d,]+\.?\d*)/i);
+  if (!vendorMatch) return null;
+
+  const vendor   = vendorMatch[1].replace(/\s+\+\d+$/, "").trim();
+  const currency = vendorMatch[2].trim().toUpperCase() === "R" ? "ZAR" : vendorMatch[2].trim().toUpperCase();
+  const amount   = parseFloat(vendorMatch[3].replace(",", ""));
+
+  return { date, vendor, amount, currency, category: "", subcategory: "" };
+}
+
+function parseDiscoveryEFT(body, emailDate) {
+  const date = Utilities.formatDate(emailDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  const amountMatch = body.match(/R\s+([\d,]+\.?\d*)/);
+  if (!amountMatch) return null;
+  const amount = parseFloat(amountMatch[1].replace(",", ""));
+
+  const toMatch = body.match(/To\s+([^\n]+)/);
+  const vendor = toMatch ? toMatch[1].trim() : "EFT Payment";
+
+  const refMatch = body.match(/Reference:\s+([^\n]+)/i);
+  const reference = refMatch ? refMatch[1].trim() : "";
+
+  return {
+    date,
+    vendor,
+    amount,
+    currency: "ZAR",
+    category: "Transfer",
+    subcategory: reference || "EFT",
+  };
+}
+
+function parseIncomingPayment(body, emailDate) {
+  const date = Utilities.formatDate(emailDate, Session.getScriptTimeZone(), "yyyy-MM-dd");
+
+  const amountMatch = body.match(/R\s+([\d,]+\.?\d*)/);
+  if (!amountMatch) return null;
+  const amount = parseFloat(amountMatch[1].replace(",", ""));
+
+  const refMatch = body.match(/Reference:\s+([^\n]+)/i);
+  const reference = refMatch ? refMatch[1].trim() : "";
+  const vendor = reference || "Incoming Payment";
+
+  const isCreditCardPayment = reference.toLowerCase().includes("credit card")
+    || reference.toLowerCase().includes("cc payment")
+    || reference.toLowerCase().includes("card payment");
+
+  return {
+    date,
+    vendor,
+    amount,
+    currency: "ZAR",
+    category:    isCreditCardPayment ? "Transfer" : "Income",
+    subcategory: isCreditCardPayment ? "Credit Card Payment" : "Incoming Payment",
+  };
+}
+
+// ─── Sheet helpers ────────────────────────────────────────────────────────────
+
+function isDuplicate(transaction) {
+  const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
+  if (!files.hasNext()) throw new Error("Spreadsheet not found");
+  const ss    = SpreadsheetApp.open(files.next());
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  const data  = sheet.getDataRange().getValues();
+
+  return data.some(row =>
+    row[0] === transaction.date &&
+    row[1] === transaction.vendor &&
+    row[2] === transaction.amount
+  );
+}
+
+function writeToSheet(transaction) {
+  const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
+  if (!files.hasNext()) throw new Error("Spreadsheet not found: " + SPREADSHEET_NAME);
+  const ss    = SpreadsheetApp.open(files.next());
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) throw new Error("Sheet tab not found: " + SHEET_NAME);
+
+  sheet.appendRow([
+    transaction.date,
+    transaction.vendor,
+    transaction.amount,
+    transaction.currency,
+    transaction.category,
+    transaction.subcategory,
+  ]);
+}
+
+// ─── Web app endpoint ─────────────────────────────────────────────────────────
+
+function doGet(e) {
+  const tab   = e.parameter.sheet;
+  const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
+  if (!files.hasNext()) return jsonResponse({ error: "Spreadsheet not found" });
+  const ss = SpreadsheetApp.open(files.next());
+
+  let sheet;
+  if (tab === "transactions") sheet = ss.getSheetByName(SHEET_NAME);
+  else if (tab === "budgets") sheet = ss.getSheetByName("Budgets");
+  else if (tab === "assets")  sheet = ss.getSheetByName("Assets");
+  else return jsonResponse({ error: "Unknown sheet" });
+
+  return jsonResponse(sheet.getDataRange().getValues());
+}
+
+function jsonResponse(data) {
+  return ContentService
+    .createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
