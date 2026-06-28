@@ -27,7 +27,7 @@ export default function Overview({ transactions, budgets, assets, isMobile }) {
   const currentTx   = useMemo(() => filterByMonth(transactions, nowYear, nowMonth),  [transactions, nowYear, nowMonth]);
   const prevTx      = useMemo(() => filterByMonth(transactions, prevYear, prevMonth), [transactions, prevYear, prevMonth]);
 
-  const income      = useMemo(() => currentTx.filter(t => t.category === "Income" && t.currency === "ZAR").reduce((s, t) => s + t.amount, 0), [currentTx]);
+  const income      = useMemo(() => currentTx.filter(t => t.category === "Income").reduce((s, t) => s + t.amount, 0), [currentTx]);
   const spent       = useMemo(() => totalExpenses(currentTx), [currentTx]);
   const saved       = income - spent;
   const savingsRate = income > 0 ? (saved / income) * 100 : 0;

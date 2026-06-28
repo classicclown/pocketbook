@@ -90,7 +90,7 @@ export default function Planning({ transactions, assets }) {
     const total = last3.reduce((sum, ym) => {
       const [y, m] = ym.split("-").map(Number);
       const tx     = filterByMonth(transactions, y, m);
-      const income = tx.filter(t => t.category === "Income" && t.currency === "ZAR").reduce((s, t) => s + t.amount, 0);
+      const income = tx.filter(t => t.category === "Income").reduce((s, t) => s + t.amount, 0);
       const exp    = totalExpenses(tx);
       return sum + (income - exp);
     }, 0);

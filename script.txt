@@ -140,18 +140,25 @@ function writeToSheet(transaction) {
 // ─── Web app endpoint ─────────────────────────────────────────────────────────
 
 function doGet(e) {
-  const tab   = e.parameter.sheet;
-  const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
-  if (!files.hasNext()) return jsonResponse({ error: "Spreadsheet not found" });
-  const ss = SpreadsheetApp.open(files.next());
+  try {
+    const tab   = e.parameter.sheet;
+    const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
+    if (!files.hasNext()) return jsonResponse({ error: "Spreadsheet not found" });
+    const ss = SpreadsheetApp.open(files.next());
 
-  let sheet;
-  if (tab === "transactions") sheet = ss.getSheetByName(SHEET_NAME);
-  else if (tab === "budgets") sheet = ss.getSheetByName("Budgets");
-  else if (tab === "assets")  sheet = ss.getSheetByName("Assets");
-  else return jsonResponse({ error: "Unknown sheet" });
+    let sheetName;
+    if (tab === "transactions") sheetName = SHEET_NAME;
+    else if (tab === "budgets") sheetName = "Budgets";
+    else if (tab === "assets")  sheetName = "Assets";
+    else return jsonResponse({ error: "Unknown sheet: " + tab });
 
-  return jsonResponse(sheet.getDataRange().getValues());
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) return jsonResponse([]); // tab doesn't exist yet — return empty
+
+    return jsonResponse(sheet.getDataRange().getValues());
+  } catch (err) {
+    return jsonResponse({ error: String(err) });
+  }
 }
 
 function jsonResponse(data) {

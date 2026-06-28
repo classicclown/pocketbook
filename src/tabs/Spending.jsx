@@ -63,7 +63,7 @@ function TransactionRow({ tx }) {
           color: isIncome ? T.green : T.text,
           flexShrink: 0,
         }}>
-          {isIncome ? "+" : ""}{fmt(tx.amount, tx.currency)}
+          {isIncome ? "+" : ""}{fmt(tx.originalAmount ?? tx.amount, tx.currency)}
         </div>
       </div>
 

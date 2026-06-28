@@ -76,7 +76,7 @@ export const getMonths = (transactions) => {
 };
 
 export const totalExpenses = (transactions) =>
-  transactions.filter(t => t.currency === "ZAR" && t.category !== "Income")
+  transactions.filter(t => t.category !== "Income")
     .reduce((a, t) => a + t.amount, 0);
 
 export const sumByCategory = (transactions) =>
