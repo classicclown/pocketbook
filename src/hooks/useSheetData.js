@@ -18,14 +18,14 @@ function normalizeDate(raw) {
   return new Date(d.getTime() + 2 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
-// Sheet columns: Date | Description | Amount | Currency | Amount ZAR |
-// Main Category | Sub Category | Merchant Key
+// Sheet columns: Date | Description | Amount | Currency | Main Category |
+// Sub Category | Amount ZAR | Merchant Key
 // `amount` is always the ZAR-equivalent (Amount ZAR column, falling back to the
 // original amount when blank) so all math is in one currency. The original
 // amount + currency are kept for display only. Income is distinguished by category.
 const parseTransactions = (rows) => rows.slice(1).map(row => {
   const original = parseFloat(row[2]) || 0;
-  const zar      = parseFloat(row[4]);
+  const zar      = parseFloat(row[6]);
   return {
     date:           normalizeDate(row[0]),
     vendor:         row[1] || "",
@@ -33,8 +33,8 @@ const parseTransactions = (rows) => rows.slice(1).map(row => {
     originalAmount: original,
     currency:       row[3] || "ZAR",
     card:           "",
-    category:       row[5] || "Uncategorised",
-    subcategory:    row[6] || "",
+    category:       row[4] || "Uncategorised",
+    subcategory:    row[5] || "",
   };
 }).filter(t => t.date);
 

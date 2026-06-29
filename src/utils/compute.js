@@ -75,9 +75,12 @@ export const getMonths = (transactions) => {
   return Array.from(set).sort().reverse();
 };
 
+// Only positive (debit) amounts are spending. Negative amounts are credits —
+// refunds, reimbursements, and credit-card payments — and must not cancel out
+// real spend, otherwise monthly totals collapse toward zero.
 export const totalExpenses = (transactions) =>
   transactions.filter(t => t.category !== "Income")
-    .reduce((a, t) => a + t.amount, 0);
+    .reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0);
 
 export const sumByCategory = (transactions) =>
   transactions.reduce((acc, t) => {
