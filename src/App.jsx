@@ -5,6 +5,7 @@ import Overview from "./tabs/Overview";
 import Spending from "./tabs/Spending";
 import Analysis from "./tabs/Analysis";
 import Planning from "./tabs/Planning";
+import Settings from "./tabs/Settings";
 import { useSheetData } from "./hooks/useSheetData";
 
 function LoadingState() {
@@ -50,9 +51,12 @@ function ErrorState({ error, onRetry }) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
-  const { transactions, budgets, assets, loading, error, refetch } = useSheetData();
+  const {
+    transactions, budgets, assets, settings,
+    loading, error, refetch, saveSetting, saveBudgets, isMock,
+  } = useSheetData();
 
-  const tabProps = { transactions, budgets, assets };
+  const tabProps = { transactions, budgets, assets, settings };
 
   const renderTab = () => {
     if (loading) return <LoadingState />;
@@ -62,6 +66,7 @@ export default function App() {
       case "spending":  return <Spending  {...tabProps} />;
       case "analysis":  return <Analysis  {...tabProps} />;
       case "planning":  return <Planning  {...tabProps} />;
+      case "settings":  return <Settings  {...tabProps} saveSetting={saveSetting} saveBudgets={saveBudgets} isMock={isMock} />;
       default:          return <Overview  {...tabProps} />;
     }
   };

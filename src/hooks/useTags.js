@@ -37,6 +37,27 @@ export function clearAllTags() {
   emit();
 }
 
+// Custom tag options live alongside the defaults in localStorage.
+const OPTIONS_KEY = "pb:tagOptions";
+
+export function getCustomTagOptions() {
+  try {
+    const list = JSON.parse(localStorage.getItem(OPTIONS_KEY));
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setCustomTagOptions(list) {
+  localStorage.setItem(OPTIONS_KEY, JSON.stringify(list));
+  emit();
+}
+
+export function getTagOptions() {
+  return [...DEFAULT_TAG_OPTIONS, ...getCustomTagOptions()];
+}
+
 export function useTags() {
   const v = useSyncExternalStore(
     (cb) => {
@@ -45,5 +66,5 @@ export function useTags() {
     },
     () => version
   );
-  return { version: v, getTag, setTag };
+  return { version: v, getTag, setTag, options: getTagOptions() };
 }

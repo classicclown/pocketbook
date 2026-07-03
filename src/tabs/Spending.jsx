@@ -9,7 +9,7 @@ import Chip from "../components/Chip";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
-import { useTags, DEFAULT_TAG_OPTIONS } from "../hooks/useTags";
+import { useTags } from "../hooks/useTags";
 import { projectMonth } from "../utils/projection";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory, sumByVendor,
@@ -19,7 +19,7 @@ import {
 function TransactionRow({ tx }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const { getTag, setTag } = useTags();
+  const { getTag, setTag, options: tagOptions } = useTags();
   const tag   = getTag(tx);
   const isIncome  = tx.category === "Income";
   const isUSD     = tx.currency === "USD";
@@ -76,7 +76,7 @@ function TransactionRow({ tx }) {
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Tag</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {DEFAULT_TAG_OPTIONS.map(t2 => {
+            {tagOptions.map(t2 => {
               const active = tag === t2;
               return (
                 <button

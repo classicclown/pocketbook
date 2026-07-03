@@ -9,28 +9,46 @@ const NAV_ITEMS = [
   { id: "planning",  label: "Planning",  icon: "◎" },
 ];
 
+const SETTINGS_ITEM = { id: "settings", label: "Settings", icon: "◍" };
+
 const now = new Date();
 const currentMonthLabel = `${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`;
 
-// Temporary toggle until the Settings screen owns theme preference.
-function ThemeToggle({ compact }) {
-  const { T, mode, setPreference } = useTheme();
+function SidebarButton({ item, active, onClick }) {
+  const { T } = useTheme();
   return (
-    <button
-      onClick={() => setPreference(mode === "dark" ? "light" : "dark")}
-      title={`Switch to ${mode === "dark" ? "light" : "dark"} mode`}
-      style={{
-        background: "none",
-        border: `1px solid ${T.border}`,
-        borderRadius: T.radius,
-        color: T.sub,
-        cursor: "pointer",
-        fontSize: compact ? 14 : 13,
-        padding: compact ? "4px 8px" : "6px 10px",
-        fontFamily: T.font,
-      }}
-    >
-      {mode === "dark" ? "☀" : "☾"}
+    <button onClick={onClick} style={{
+      width: "100%",
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      padding: "10px 12px",
+      borderRadius: T.radius,
+      border: "none",
+      cursor: "pointer",
+      background: active ? T.accentBg : "transparent",
+      color: active ? T.accent : T.sub,
+      fontSize: 13,
+      fontWeight: active ? 600 : 400,
+      fontFamily: T.font,
+      marginBottom: 2,
+      textAlign: "left",
+      position: "relative",
+    }}>
+      <span style={{ fontSize: 16 }}>{item.icon}</span>
+      {item.label}
+      {active && (
+        <div style={{
+          position: "absolute",
+          right: 0,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 3,
+          height: 16,
+          background: T.accent,
+          borderRadius: "2px 0 0 2px",
+        }} />
+      )}
     </button>
   );
 }
@@ -65,50 +83,27 @@ export default function Layout({ children, activeTab, setActiveTab }) {
 
           <nav style={{ padding: "12px", flex: 1 }}>
             {NAV_ITEMS.map(item => (
-              <button key={item.id} onClick={() => setActiveTab(item.id)} style={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-                padding: "10px 12px",
-                borderRadius: T.radius,
-                border: "none",
-                cursor: "pointer",
-                background: activeTab === item.id ? T.accentBg : "transparent",
-                color: activeTab === item.id ? T.accent : T.sub,
-                fontSize: 13,
-                fontWeight: activeTab === item.id ? 600 : 400,
-                fontFamily: T.font,
-                marginBottom: 2,
-                textAlign: "left",
-                position: "relative",
-              }}>
-                <span style={{ fontSize: 16 }}>{item.icon}</span>
-                {item.label}
-                {activeTab === item.id && (
-                  <div style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: 3,
-                    height: 16,
-                    background: T.accent,
-                    borderRadius: "2px 0 0 2px",
-                  }} />
-                )}
-              </button>
+              <SidebarButton
+                key={item.id}
+                item={item}
+                active={activeTab === item.id}
+                onClick={() => setActiveTab(item.id)}
+              />
             ))}
           </nav>
 
-          <div style={{
-            padding: "16px 24px", borderTop: `1px solid ${T.border}`,
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
+          <div style={{ padding: "12px", borderTop: `1px solid ${T.border}` }}>
+            <SidebarButton
+              item={SETTINGS_ITEM}
+              active={activeTab === SETTINGS_ITEM.id}
+              onClick={() => setActiveTab(SETTINGS_ITEM.id)}
+            />
+          </div>
+
+          <div style={{ padding: "12px 24px 16px" }}>
             <div style={{ fontSize: 10, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
               {currentMonthLabel}
             </div>
-            <ThemeToggle />
           </div>
         </div>
       )}
@@ -121,11 +116,6 @@ export default function Layout({ children, activeTab, setActiveTab }) {
         minHeight: "100vh",
         boxSizing: "border-box",
       }}>
-        {isMobile && (
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
-            <ThemeToggle compact />
-          </div>
-        )}
         {children}
       </main>
 
@@ -140,7 +130,7 @@ export default function Layout({ children, activeTab, setActiveTab }) {
           padding: "8px 0 calc(12px + env(safe-area-inset-bottom))",
           zIndex: 100,
         }}>
-          {NAV_ITEMS.map(item => (
+          {[...NAV_ITEMS, SETTINGS_ITEM].map(item => (
             <button key={item.id} onClick={() => setActiveTab(item.id)} style={{
               flex: 1,
               background: "none",
