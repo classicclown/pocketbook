@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTheme } from "./theme/ThemeContext";
 import Layout from "./components/Layout";
 import Overview from "./tabs/Overview";
@@ -50,16 +50,9 @@ function ErrorState({ error, onRetry }) {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [isMobile, setIsMobile]   = useState(window.innerWidth < 768);
   const { transactions, budgets, assets, loading, error, refetch } = useSheetData();
 
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-
-  const tabProps = { transactions, budgets, assets, isMobile };
+  const tabProps = { transactions, budgets, assets };
 
   const renderTab = () => {
     if (loading) return <LoadingState />;
@@ -74,7 +67,7 @@ export default function App() {
   };
 
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab} isMobile={isMobile}>
+    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
       {renderTab()}
     </Layout>
   );

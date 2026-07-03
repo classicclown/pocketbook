@@ -1,4 +1,5 @@
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import { MONTH_LABELS } from "../utils/compute";
 
 const NAV_ITEMS = [
@@ -34,8 +35,9 @@ function ThemeToggle({ compact }) {
   );
 }
 
-export default function Layout({ children, activeTab, setActiveTab, isMobile }) {
+export default function Layout({ children, activeTab, setActiveTab }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
   return (
     <div style={{
       display: "flex",
@@ -135,7 +137,7 @@ export default function Layout({ children, activeTab, setActiveTab, isMobile }) 
           background: T.surface,
           borderTop: `1px solid ${T.border}`,
           display: "flex",
-          padding: "8px 0 20px",
+          padding: "8px 0 calc(12px + env(safe-area-inset-bottom))",
           zIndex: 100,
         }}>
           {NAV_ITEMS.map(item => (

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import ProgressBar from "../components/ProgressBar";
 import StatCard from "../components/StatCard";
@@ -17,8 +18,9 @@ function greeting() {
   return "Good evening";
 }
 
-export default function Overview({ transactions, budgets, assets, isMobile }) {
+export default function Overview({ transactions, budgets, assets }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
   const nowYear     = new Date().getFullYear();
   const nowMonth    = new Date().getMonth() + 1;
   const nowDay      = new Date().getDate();
