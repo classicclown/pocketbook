@@ -5,6 +5,10 @@ import {
 import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import CustomTooltip from "../components/CustomTooltip";
+import Chip from "../components/Chip";
+import PageHeader from "../components/PageHeader";
+import SectionHeader from "../components/SectionHeader";
+import { useChartDefaults } from "../theme/chart";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory, sumByVendor,
   fmt, monthLabel, MONTH_LABELS,
@@ -174,27 +178,9 @@ function CategoryGroup({ cat }) {
   );
 }
 
-function Chip({ label, active, onClick }) {
-  const { T } = useTheme();
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontSize: 12, fontWeight: active ? 600 : 400,
-        padding: "5px 12px", borderRadius: T.radius,
-        border: `1px solid ${active ? T.accent : T.border}`,
-        background: active ? T.accentBg : "transparent",
-        color: active ? T.accent : T.sub,
-        cursor: "pointer", fontFamily: T.font,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
 export default function Spending({ transactions, budgets }) {
   const { T } = useTheme();
+  const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
@@ -266,8 +252,8 @@ export default function Spending({ transactions, budgets }) {
   };
 
   return (
-    <div style={{ maxWidth: 800 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 20 }}>Spending</div>
+    <div style={{ maxWidth: 960 }}>
+      <PageHeader title="Spending" />
 
       {/* Top controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
@@ -309,13 +295,13 @@ export default function Spending({ transactions, budgets }) {
             >
               <XAxis
                 dataKey={selectedMonth ? "name" : "label"}
-                tick={{ fontSize: 10, fill: T.sub }}
-                axisLine={false} tickLine={false}
+                tick={chart.tick}
+                axisLine={chart.axisLine} tickLine={chart.tickLine}
               />
               <YAxis
-                tickFormatter={v => `${(v / 1000).toFixed(0)}k`}
-                tick={{ fontSize: 10, fill: T.sub }}
-                axisLine={false} tickLine={false}
+                tickFormatter={chart.kFormat}
+                tick={chart.tick}
+                axisLine={chart.axisLine} tickLine={chart.tickLine}
               />
               <Tooltip content={<CustomTooltip />} />
               {/* Budget reference lines in category mode */}
@@ -371,9 +357,7 @@ export default function Spending({ transactions, budgets }) {
       {/* Budget summary card (category drill-down only) */}
       {selectedMonth && breakdown === "category" && (
         <Card>
-          <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>
-            Budget Summary · {monthLabel(selectedMonth)}
-          </div>
+          <SectionHeader>Budget Summary · {monthLabel(selectedMonth)}</SectionHeader>
           {drillData.map(({ name, total }) => {
             const limit = budgets[name];
             if (!limit) return null;

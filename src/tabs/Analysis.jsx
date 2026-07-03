@@ -3,31 +3,22 @@ import {
   LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid,
 } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import CustomTooltip from "../components/CustomTooltip";
+import Chip from "../components/Chip";
+import PageHeader from "../components/PageHeader";
+import SectionHeader from "../components/SectionHeader";
+import { useChartDefaults } from "../theme/chart";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory,
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
 
-function Chip({ label, active, onClick }) {
-  const { T } = useTheme();
-  return (
-    <button onClick={onClick} style={{
-      fontSize: 12, fontWeight: active ? 600 : 400,
-      padding: "5px 12px", borderRadius: T.radius,
-      border: `1px solid ${active ? T.accent : T.border}`,
-      background: active ? T.accentBg : "transparent",
-      color: active ? T.accent : T.sub,
-      cursor: "pointer", fontFamily: T.font,
-    }}>
-      {label}
-    </button>
-  );
-}
-
 export default function Analysis({ transactions }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
+  const chart = useChartDefaults();
   const [metric, setMetric] = useState("spending");
 
   const months = useMemo(() => getMonths(transactions).slice().reverse(), [transactions]);
@@ -75,8 +66,8 @@ export default function Analysis({ transactions }) {
   const DOT_COLORS = T.chartSeries;
 
   return (
-    <div style={{ maxWidth: 800 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 20 }}>Analysis</div>
+    <div style={{ maxWidth: 960 }}>
+      <PageHeader title="Analysis" />
 
       {/* Trend chart */}
       <Card>
@@ -98,9 +89,9 @@ export default function Analysis({ transactions }) {
 
         <ResponsiveContainer width="100%" height={160}>
           <LineChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke={T.border} strokeDasharray="4 2" />
-            <XAxis dataKey="label" tick={{ fontSize: 10, fill: T.sub }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: T.sub }} axisLine={false} tickLine={false} />
+            <CartesianGrid vertical={false} stroke={chart.gridStroke} strokeDasharray="4 2" />
+            <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+            <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
             <Tooltip content={<CustomTooltip />} />
             <Line
               type="monotone" dataKey="value"
@@ -112,11 +103,10 @@ export default function Analysis({ transactions }) {
         </ResponsiveContainer>
       </Card>
 
-      {/* Savings rate bars */}
-      <Card>
-        <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 14 }}>
-          Monthly Savings Rate
-        </div>
+      {/* Savings rate + category trends side by side on desktop */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+      <Card style={{ marginBottom: 0 }}>
+        <SectionHeader style={{ marginBottom: 14 }}>Monthly Savings Rate</SectionHeader>
         {monthlyStats.slice().reverse().map((s) => (
           <div key={s.ym} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
             <div style={{ width: 36, fontSize: 11, color: T.sub, flexShrink: 0 }}>{s.label}</div>
@@ -136,15 +126,10 @@ export default function Analysis({ transactions }) {
       </Card>
 
       {/* Category comparison */}
-      <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
-            Category Trends
-          </div>
-          <div style={{ fontSize: 11, color: T.sub }}>
-            {monthLabel(prevYM)} vs {monthLabel(curYM)}
-          </div>
-        </div>
+      <Card style={{ marginBottom: 0 }}>
+        <SectionHeader right={`${monthLabel(prevYM)} vs ${monthLabel(curYM)}`} style={{ marginBottom: 16 }}>
+          Category Trends
+        </SectionHeader>
         {allCats.map((cat, i) => {
           const cur  = curCats[cat]  || 0;
           const prev = prevCats[cat] || 0;
@@ -173,6 +158,7 @@ export default function Analysis({ transactions }) {
           );
         })}
       </Card>
+      </div>
     </div>
   );
 }

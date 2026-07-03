@@ -1,9 +1,13 @@
 import { useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import ProgressBar from "../components/ProgressBar";
 import CustomTooltip from "../components/CustomTooltip";
+import PageHeader from "../components/PageHeader";
+import SectionHeader from "../components/SectionHeader";
+import { useChartDefaults } from "../theme/chart";
 import {
   getMonths, filterByMonth, totalExpenses, calcNetWorth,
   fmt, MONTH_LABELS,
@@ -39,7 +43,7 @@ function GoalCard({ goal }) {
   const color     = T[goal.color] || goal.color;
 
   return (
-    <Card style={{ cursor: "pointer" }} >
+    <Card style={{ cursor: "pointer", marginBottom: 0 }} >
       <div onClick={() => setExpanded(e => !e)}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -83,6 +87,8 @@ function GoalCard({ goal }) {
 
 export default function Planning({ transactions, assets }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
+  const chart = useChartDefaults();
   const { netWorth } = useMemo(() => calcNetWorth(assets), [assets]);
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
@@ -116,27 +122,25 @@ export default function Planning({ transactions, assets }) {
   }, [netWorth, avgSavings]);
 
   return (
-    <div style={{ maxWidth: 800 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, color: T.text, marginBottom: 20 }}>Planning</div>
+    <div style={{ maxWidth: 960 }}>
+      <PageHeader title="Planning" />
 
       {/* Savings Goals */}
-      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>
-        Savings Goals
+      <SectionHeader>Savings Goals</SectionHeader>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
+        {GOALS.map(g => <GoalCard key={g.name} goal={g} />)}
       </div>
-      {GOALS.map(g => <GoalCard key={g.name} goal={g} />)}
 
       {/* Net Worth Forecast */}
-      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, margin: "20px 0 12px" }}>
-        Net Worth Forecast
-      </div>
+      <SectionHeader style={{ margin: "20px 0 12px" }}>Net Worth Forecast</SectionHeader>
       <Card>
         <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>
           Based on avg monthly savings of {fmt(Math.max(0, avgSavings))} over last 3 months
         </div>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={forecastData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-            <XAxis dataKey="label" tick={{ fontSize: 9, fill: T.sub }} axisLine={false} tickLine={false} interval={2} />
-            <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: T.sub }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ ...chart.tick, fontSize: 9 }} axisLine={chart.axisLine} tickLine={chart.tickLine} interval={2} />
+            <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
             <Tooltip content={<CustomTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             <Line
@@ -154,9 +158,7 @@ export default function Planning({ transactions, assets }) {
       </Card>
 
       {/* Milestones */}
-      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, margin: "20px 0 12px" }}>
-        Milestones
-      </div>
+      <SectionHeader style={{ margin: "20px 0 12px" }}>Milestones</SectionHeader>
       <Card>
         {MILESTONES.map((m, i) => (
           <div key={i} style={{

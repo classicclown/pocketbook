@@ -6,6 +6,9 @@ import Card from "../components/Card";
 import ProgressBar from "../components/ProgressBar";
 import StatCard from "../components/StatCard";
 import CustomTooltip from "../components/CustomTooltip";
+import PageHeader from "../components/PageHeader";
+import SectionHeader from "../components/SectionHeader";
+import { useChartDefaults } from "../theme/chart";
 import {
   filterByMonth, totalExpenses, sumByCategory,
   calcNetWorth, fmt, monthLabel, MONTH_LABELS,
@@ -21,6 +24,7 @@ function greeting() {
 export default function Overview({ transactions, budgets, assets }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
+  const chart = useChartDefaults();
   const nowYear     = new Date().getFullYear();
   const nowMonth    = new Date().getMonth() + 1;
   const nowDay      = new Date().getDate();
@@ -68,15 +72,7 @@ export default function Overview({ transactions, budgets, assets }) {
 
   return (
     <div style={{ maxWidth: 960 }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 4 }}>
-          {monthLabel(currentYM)}
-        </div>
-        <div style={{ fontSize: 28, fontWeight: 700, color: T.text }}>
-          {greeting()}, Ryan
-        </div>
-      </div>
+      <PageHeader eyebrow={monthLabel(currentYM)} title={`${greeting()}, Ryan`} />
 
       {/* Net Worth Banner */}
       <div style={{
@@ -169,13 +165,11 @@ export default function Overview({ transactions, budgets, assets }) {
 
           {/* 6-Month Bar Chart */}
           <Card style={{ marginBottom: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 12 }}>
-              6-Month Spending
-            </div>
+            <SectionHeader>6-Month Spending</SectionHeader>
             <ResponsiveContainer width="100%" height={140}>
               <BarChart data={last6} barSize={28} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: T.sub }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={v => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: T.sub }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+                <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="total" radius={[2, 2, 0, 0]}>
                   {last6.map((entry, i) => (
@@ -190,12 +184,9 @@ export default function Overview({ transactions, budgets, assets }) {
         {/* Right column — Budget vs Actual */}
         <div>
           <Card style={{ marginBottom: 0 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
-                Budget vs Actual
-              </div>
-              <div style={{ fontSize: 10, color: T.sub }}>{monthLabel(currentYM)}</div>
-            </div>
+            <SectionHeader right={monthLabel(currentYM)} style={{ marginBottom: 16 }}>
+              Budget vs Actual
+            </SectionHeader>
             {Object.entries(budgets).map(([cat, limit]) => {
               const actual = catSpend[cat] || 0;
               const pct    = limit > 0 ? (actual / limit) * 100 : 0;
