@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useDeferredValue } from "react";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine,
 } from "recharts";
@@ -13,7 +13,7 @@ import EnvelopeCard from "../components/EnvelopeCard";
 import DetailSheet from "../components/DetailSheet";
 import { CategoryDetail, MerchantDetail } from "../components/InsightDetails";
 import { useTags } from "../hooks/useTags";
-import { projectMonth } from "../utils/projection";
+import { projectMonth, isSpend } from "../utils/projection";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory, sumByVendor,
   fmt, monthLabel, MONTH_LABELS,
@@ -207,8 +207,14 @@ export default function Spending({ transactions, budgets, settings }) {
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+  // Search & filters
+  const [query,          setQuery]          = useState("");
+  const [filterTag,      setFilterTag]      = useState(null);
+  const [filterCurrency, setFilterCurrency] = useState(null);
+  const deferredQuery = useDeferredValue(query);
+
   // Current-month projection (daily run rate, one-offs not extrapolated)
-  const { version: tagVersion, getTag } = useTags();
+  const { version: tagVersion, getTag, options: tagOptions } = useTags();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const proj = useMemo(
     () => projectMonth(transactions, { year: now.getFullYear(), month: now.getMonth() + 1, getTag }),
@@ -270,6 +276,38 @@ export default function Spending({ transactions, budgets, settings }) {
       }))
       .sort((a, b) => b.total - a.total);
   }, [visibleTx]);
+
+  const currencies = useMemo(
+    () => Array.from(new Set(transactions.map(t => t.currency))).sort(),
+    [transactions]
+  );
+
+  const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency);
+
+  const searchResults = useMemo(() => {
+    if (!searchActive) return null;
+    const q = deferredQuery.trim().toLowerCase();
+    return transactions
+      .filter(t => {
+        if (q && !`${t.vendor} ${t.category} ${t.subcategory}`.toLowerCase().includes(q)) return false;
+        if (filterTag && getTag(t) !== filterTag) return false;
+        if (filterCurrency && t.currency !== filterCurrency) return false;
+        return true;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchActive, deferredQuery, filterTag, filterCurrency, transactions, tagVersion]);
+
+  const searchTotal = useMemo(
+    () => (searchResults || []).filter(isSpend).reduce((s, t) => s + t.amount, 0),
+    [searchResults]
+  );
+
+  const clearSearch = () => {
+    setQuery("");
+    setFilterTag(null);
+    setFilterCurrency(null);
+  };
 
   // Envelope view: allocated vs spent per category for the viewed month
   const envelopeMode = settings?.envelopeMode;
@@ -475,22 +513,81 @@ export default function Spending({ transactions, budgets, settings }) {
 
       {/* Transaction list */}
       <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>
-            Transactions{selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
-            <span style={{ marginLeft: 6, fontSize: 11, color: T.sub, fontWeight: 400 }}>
-              {visibleTx.length} items
-            </span>
+            {searchActive
+              ? <>Search results
+                  <span style={{ marginLeft: 6, fontSize: 11, color: T.sub, fontWeight: 400 }}>
+                    {searchResults.length} items · {fmt(searchTotal)} spend
+                  </span>
+                </>
+              : <>Transactions{selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
+                  <span style={{ marginLeft: 6, fontSize: 11, color: T.sub, fontWeight: 400 }}>
+                    {visibleTx.length} items
+                  </span>
+                </>}
+          </div>
+          {searchActive && (
+            <button
+              onClick={clearSearch}
+              style={{
+                fontSize: 12, color: T.sub, background: "none",
+                border: `1px solid ${T.border}`, borderRadius: T.radius, padding: "4px 10px",
+                cursor: "pointer", fontFamily: T.font, flexShrink: 0,
+              }}
+            >
+              ✕ Clear
+            </button>
+          )}
+        </div>
+
+        {/* Search input + filters (searches all months) */}
+        <div style={{ marginBottom: 12 }}>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search vendor, category, sub-category…"
+            style={{
+              width: "100%", boxSizing: "border-box",
+              fontSize: 13, fontFamily: T.font, color: T.text,
+              background: T.bg, border: `1px solid ${T.border}`,
+              borderRadius: T.radius, padding: "9px 12px",
+              outline: "none",
+            }}
+          />
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {tagOptions.map(t2 => (
+              <Chip key={t2} label={t2} active={filterTag === t2}
+                onClick={() => setFilterTag(filterTag === t2 ? null : t2)} />
+            ))}
+            {currencies.length > 1 && currencies.map(c => (
+              <Chip key={c} label={c} active={filterCurrency === c}
+                onClick={() => setFilterCurrency(filterCurrency === c ? null : c)} />
+            ))}
           </div>
         </div>
 
-        {/* Nested accordion: tap a category to reveal its sub-categories,
-            then a sub-category to reveal the individual vendor transactions. */}
-        {categoryTree.length === 0 ? (
+        {searchActive ? (
+          searchResults.length === 0 ? (
+            <div style={{ padding: "16px 0", fontSize: 13, color: T.sub, textAlign: "center" }}>
+              No matching transactions.
+            </div>
+          ) : (
+            searchResults.slice(0, 200).map((tx, i) => (
+              <TransactionRow
+                key={`${tx.date}-${tx.vendor}-${i}`}
+                tx={tx}
+                onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
+              />
+            ))
+          )
+        ) : categoryTree.length === 0 ? (
           <div style={{ padding: "16px 0", fontSize: 13, color: T.sub, textAlign: "center" }}>
             No transactions to show.
           </div>
         ) : (
+          /* Nested accordion: tap a category to reveal its sub-categories,
+             then a sub-category to reveal the individual vendor transactions. */
           categoryTree.map(cat => (
             <CategoryGroup
               key={cat.name}
@@ -499,6 +596,11 @@ export default function Spending({ transactions, budgets, settings }) {
               onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
             />
           ))
+        )}
+        {searchActive && searchResults.length > 200 && (
+          <div style={{ padding: "10px 0 0", fontSize: 11, color: T.sub, textAlign: "center" }}>
+            Showing first 200 of {searchResults.length} results — refine your search.
+          </div>
         )}
       </Card>
 
