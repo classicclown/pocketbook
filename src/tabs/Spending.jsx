@@ -106,6 +106,72 @@ function TransactionRow({ tx }) {
   );
 }
 
+// Collapsible header used for both the Category (depth 0) and Sub-category
+// (depth 1) levels of the transactions accordion.
+function GroupHeader({ label, total, count, depth, open, onClick }) {
+  const isTop = depth === 0;
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: isTop ? "12px 0" : "9px 0",
+        cursor: "pointer", gap: 12,
+        borderBottom: `1px solid ${T.border}`,
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{
+          fontSize: 9, color: T.sub, width: 9, flexShrink: 0,
+          transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s",
+        }}>▶</span>
+        <span style={{
+          fontSize: isTop ? 13 : 12,
+          fontWeight: isTop ? 700 : 600,
+          color: isTop ? T.text : T.sub,
+          textTransform: isTop ? "uppercase" : "none",
+          letterSpacing: isTop ? 0.5 : 0,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+        }}>{label}</span>
+        <span style={{ fontSize: 10, color: T.sub, flexShrink: 0 }}>· {count}</span>
+      </div>
+      <span style={{ fontSize: isTop ? 13 : 12, fontWeight: 600, fontFamily: T.mono, color: T.text, flexShrink: 0 }}>
+        {fmt(total)}
+      </span>
+    </div>
+  );
+}
+
+// Level 2: a sub-category. Expands to reveal the individual vendor transactions.
+function SubGroup({ sub }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <GroupHeader label={sub.name} total={sub.total} count={sub.count} depth={1} open={open} onClick={() => setOpen(o => !o)} />
+      {open && (
+        <div style={{ paddingLeft: 16 }}>
+          {sub.items.map((tx, i) => <TransactionRow key={i} tx={tx} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Level 1: a category. Expands to reveal its sub-categories.
+function CategoryGroup({ cat }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <GroupHeader label={cat.name} total={cat.total} count={cat.count} depth={0} open={open} onClick={() => setOpen(o => !o)} />
+      {open && (
+        <div style={{ paddingLeft: 16 }}>
+          {cat.subs.map(sub => <SubGroup key={sub.name} sub={sub} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Chip({ label, active, onClick }) {
   return (
     <button
@@ -128,7 +194,6 @@ export default function Spending({ transactions, budgets }) {
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
-  const [groupBy,      setGroupBy]      = useState("none");     // "none" | "category" | "vendor"
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
 
@@ -164,23 +229,31 @@ export default function Spending({ transactions, budgets }) {
     return base;
   }, [selectedMonth, drillTx, transactions]);
 
-  const groupedTx = useMemo(() => {
-    if (groupBy === "none") return [{ key: null, label: null, items: visibleTx }];
-    const fn = groupBy === "category" ? t => t.category : t => t.vendor;
-    const groups = {};
+  // Nested Category → Sub-category → vendor transactions, each level totalled
+  // and sorted by spend (highest first).
+  const categoryTree = useMemo(() => {
+    const cats = {};
     visibleTx.forEach(t => {
-      const k = fn(t);
-      if (!groups[k]) groups[k] = [];
-      groups[k].push(t);
+      const catName = t.category || "Uncategorised";
+      const subName = (t.subcategory && String(t.subcategory)) || "Other";
+      if (!cats[catName]) cats[catName] = { name: catName, total: 0, count: 0, subs: {} };
+      cats[catName].total += t.amount;
+      cats[catName].count += 1;
+      const subs = cats[catName].subs;
+      if (!subs[subName]) subs[subName] = { name: subName, total: 0, count: 0, items: [] };
+      subs[subName].total += t.amount;
+      subs[subName].count += 1;
+      subs[subName].items.push(t);
     });
-    return Object.entries(groups)
-      .sort((a, b) => b[1].reduce((s, t) => s + t.amount, 0) - a[1].reduce((s, t) => s + t.amount, 0))
-      .map(([key, items]) => ({
-        key, label: key,
-        total: items.reduce((s, t) => s + (t.category !== "Income" ? t.amount : 0), 0),
-        items,
-      }));
-  }, [visibleTx, groupBy]);
+    return Object.values(cats)
+      .map(c => ({
+        ...c,
+        subs: Object.values(c.subs)
+          .map(s => ({ ...s, items: s.items.slice().sort((a, b) => b.date.localeCompare(a.date)) }))
+          .sort((a, b) => b.total - a.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [visibleTx]);
 
   const barColor = (ym) => {
     if (ym === selectedMonth) return T.accent;
@@ -325,31 +398,15 @@ export default function Spending({ transactions, budgets }) {
           </div>
         </div>
 
-        {/* Group by chips */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-          <Chip label="No grouping" active={groupBy === "none"}     onClick={() => setGroupBy("none")} />
-          <Chip label="Category"   active={groupBy === "category"} onClick={() => setGroupBy("category")} />
-          <Chip label="Vendor"     active={groupBy === "vendor"}   onClick={() => setGroupBy("vendor")} />
-        </div>
-
-        {groupedTx.map((group, gi) => (
-          <div key={gi}>
-            {group.label && (
-              <div style={{
-                display: "flex", justifyContent: "space-between",
-                padding: "6px 0 4px",
-                borderBottom: `1px solid ${T.border}`,
-                marginBottom: 2,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: T.text, textTransform: "uppercase", letterSpacing: 1 }}>{group.label}</span>
-                <span style={{ fontSize: 11, fontFamily: T.mono, color: T.sub }}>{fmt(group.total)}</span>
-              </div>
-            )}
-            {group.items.map((tx, i) => (
-              <TransactionRow key={`${gi}-${i}`} tx={tx} />
-            ))}
+        {/* Nested accordion: tap a category to reveal its sub-categories,
+            then a sub-category to reveal the individual vendor transactions. */}
+        {categoryTree.length === 0 ? (
+          <div style={{ padding: "16px 0", fontSize: 13, color: T.sub, textAlign: "center" }}>
+            No transactions to show.
           </div>
-        ))}
+        ) : (
+          categoryTree.map(cat => <CategoryGroup key={cat.name} cat={cat} />)
+        )}
       </Card>
     </div>
   );
