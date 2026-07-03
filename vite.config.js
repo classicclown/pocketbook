@@ -19,7 +19,18 @@ function appsScriptProxy(scriptUrl) {
           // Apps Script redirect bounces to a Google HTML page instead of JSON.
           const qIdx = (req.url || "").indexOf("?");
           const query = qIdx >= 0 ? req.url.slice(qIdx) : "";
-          const response = await fetch(scriptUrl + query, { redirect: "follow" });
+
+          const init = { method: req.method, redirect: "follow" };
+          if (req.method === "POST") {
+            // Buffer the body and forward as text/plain — matching what the
+            // browser sends in production so no CORS preflight is triggered.
+            const chunks = [];
+            for await (const chunk of req) chunks.push(chunk);
+            init.body = Buffer.concat(chunks).toString("utf8");
+            init.headers = { "Content-Type": "text/plain;charset=utf-8" };
+          }
+
+          const response = await fetch(scriptUrl + query, init);
           const data = await response.text();
           res.setHeader("Content-Type", "application/json");
           res.setHeader("Access-Control-Allow-Origin", "*");

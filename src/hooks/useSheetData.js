@@ -2,10 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   MOCK_TRANSACTIONS, MOCK_BUDGETS, MOCK_ASSETS,
 } from "../utils/compute";
-
-const SCRIPT_URL = import.meta.env.DEV
-  ? "/google-script"
-  : import.meta.env.VITE_SCRIPT_URL;
+import { fetchSheet, postAction, useMock } from "../api/sheet";
 
 // Sheets returns date cells as Date objects → ISO timestamps like
 // "2025-08-19T22:00:00.000Z" (SA midnight = 22:00 UTC). Recover the local
@@ -49,21 +46,29 @@ const parseAssets = (rows) => rows.slice(1).map(row => ({
   type:  row[2] || "asset",
 })).filter(a => a.asset);
 
-const useMock = !SCRIPT_URL;
+// Settings tab is key | value rows. Non-array responses (older deployed
+// script versions answer unknown sheets with { error }) fall back to defaults.
+const parseSettings = (rows) => {
+  if (!Array.isArray(rows)) return DEFAULT_SETTINGS;
+  const raw = {};
+  rows.slice(1).forEach(row => {
+    if (row[0]) raw[String(row[0])] = String(row[1] ?? "");
+  });
+  return {
+    envelopeMode: (raw.envelopeMode || "").toLowerCase() === "true",
+    raw,
+  };
+};
+
+const DEFAULT_SETTINGS = { envelopeMode: false, raw: {} };
 
 export function useSheetData() {
   const [transactions, setTransactions] = useState([]);
   const [budgets,      setBudgets]      = useState({});
   const [assets,       setAssets]       = useState([]);
+  const [settings,     setSettings]     = useState(DEFAULT_SETTINGS);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
-
-  const fetchSheet = useCallback(async (sheetName) => {
-    const url = `${SCRIPT_URL}?sheet=${sheetName}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch ${sheetName}: ${res.status}`);
-    return res.json();
-  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,25 +79,66 @@ export function useSheetData() {
         setTransactions(MOCK_TRANSACTIONS);
         setBudgets(MOCK_BUDGETS);
         setAssets(MOCK_ASSETS);
+        setSettings(DEFAULT_SETTINGS);
       } else {
-        const [txRows, budgetRows, assetRows] = await Promise.all([
+        const [txRows, budgetRows, assetRows, settingRows] = await Promise.all([
           fetchSheet("transactions"),
           fetchSheet("budgets"),
           fetchSheet("assets"),
+          fetchSheet("settings"),
         ]);
         setTransactions(parseTransactions(txRows));
         setBudgets(parseBudgets(budgetRows));
         setAssets(parseAssets(assetRows));
+        setSettings(parseSettings(settingRows));
       }
     } catch (e) {
       setError(e.message || "Failed to load data");
     } finally {
       setLoading(false);
     }
-  }, [fetchSheet]);
+  }, []);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
-  return { transactions, budgets, assets, loading, error, refetch: load };
+  // Optimistic writes: update state immediately, roll back if the POST fails.
+  const saveSetting = useCallback(async (key, value) => {
+    if (useMock) throw new Error("Not available in mock mode");
+    let previous;
+    setSettings(s => {
+      previous = s;
+      const raw = { ...s.raw, [key]: String(value) };
+      return {
+        ...s,
+        raw,
+        envelopeMode: (raw.envelopeMode || "").toLowerCase() === "true",
+      };
+    });
+    try {
+      await postAction({ action: "setSetting", key, value: String(value) });
+    } catch (e) {
+      setSettings(previous);
+      throw e;
+    }
+  }, []);
+
+  const saveBudgets = useCallback(async (next) => {
+    if (useMock) throw new Error("Not available in mock mode");
+    let previous;
+    setBudgets(b => { previous = b; return next; });
+    try {
+      await postAction({ action: "setBudgets", budgets: next });
+    } catch (e) {
+      setBudgets(previous);
+      throw e;
+    }
+  }, []);
+
+  return {
+    transactions, budgets, assets, settings,
+    loading, error, refetch: load,
+    saveSetting, saveBudgets,
+    isMock: useMock,
+  };
 }

@@ -138,26 +138,138 @@ function writeToSheet(transaction) {
 }
 
 // ─── Web app endpoint ─────────────────────────────────────────────────────────
+// GET  ?sheet=transactions|budgets|assets|settings|goals|watchlists|networth
+//   → 2D array of the tab's values (header row first), [] if the tab is missing.
+// POST body = JSON string (send WITHOUT a Content-Type header so the browser
+//   uses text/plain and skips the CORS preflight Apps Script can't answer):
+//   { "action": "setSetting",    "key": "envelopeMode", "value": "true" }
+//   { "action": "setBudgets",    "budgets": { "Groceries": 4000, ... } }
+//   { "action": "setGoals",      "goals": [{ name, target, saved, deadline, icon }, ...] }
+//   { "action": "setWatchlists", "watchlists": [{ name, type, match, monthlyLimit }, ...] }
+//   → { "ok": true } | { "ok": false, "error": "..." }
+// NOTE: after editing this script you must Deploy → Manage deployments →
+// edit → New version. An uncaught throw here returns an HTML error page,
+// which the browser reports as a CORS failure.
+
+const READ_TABS = {
+  transactions: () => SHEET_NAME,
+  budgets:      () => "Budgets",
+  assets:       () => "Assets",
+  settings:     () => "Settings",
+  goals:        () => "Goals",
+  watchlists:   () => "Watchlists",
+  networth:     () => "NetWorthHistory",
+};
+
+function openSpreadsheet() {
+  const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
+  if (!files.hasNext()) throw new Error("Spreadsheet not found: " + SPREADSHEET_NAME);
+  return SpreadsheetApp.open(files.next());
+}
+
+function getOrCreateSheet(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.appendRow(headers);
+  }
+  return sheet;
+}
 
 function doGet(e) {
   try {
-    const tab   = e.parameter.sheet;
-    const files = DriveApp.getFilesByName(SPREADSHEET_NAME);
-    if (!files.hasNext()) return jsonResponse({ error: "Spreadsheet not found" });
-    const ss = SpreadsheetApp.open(files.next());
+    const tab = e.parameter.sheet;
+    if (!READ_TABS[tab]) return jsonResponse({ error: "Unknown sheet: " + tab });
 
-    let sheetName;
-    if (tab === "transactions") sheetName = SHEET_NAME;
-    else if (tab === "budgets") sheetName = "Budgets";
-    else if (tab === "assets")  sheetName = "Assets";
-    else return jsonResponse({ error: "Unknown sheet: " + tab });
-
-    const sheet = ss.getSheetByName(sheetName);
+    const ss    = openSpreadsheet();
+    const sheet = ss.getSheetByName(READ_TABS[tab]());
     if (!sheet) return jsonResponse([]); // tab doesn't exist yet — return empty
 
     return jsonResponse(sheet.getDataRange().getValues());
   } catch (err) {
     return jsonResponse({ error: String(err) });
+  }
+}
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    const ss = openSpreadsheet();
+
+    switch (payload.action) {
+      case "setSetting":
+        upsertSetting(ss, String(payload.key), String(payload.value));
+        break;
+      case "setBudgets":
+        rewriteRows(ss, "Budgets", ["Category", "Limit"],
+          Object.keys(payload.budgets).map(k => [k, Number(payload.budgets[k]) || 0]));
+        break;
+      case "setGoals":
+        rewriteRows(ss, "Goals", ["Name", "Target", "Saved", "Deadline", "Icon"],
+          (payload.goals || []).map(g => [g.name, Number(g.target) || 0, Number(g.saved) || 0, g.deadline || "", g.icon || ""]));
+        break;
+      case "setWatchlists":
+        rewriteRows(ss, "Watchlists", ["Name", "Type", "Match", "MonthlyLimit"],
+          (payload.watchlists || []).map(w => [w.name, w.type, w.match, Number(w.monthlyLimit) || 0]));
+        break;
+      default:
+        return jsonResponse({ ok: false, error: "Unknown action: " + payload.action });
+    }
+    return jsonResponse({ ok: true });
+  } catch (err) {
+    return jsonResponse({ ok: false, error: String(err) });
+  }
+}
+
+function upsertSetting(ss, key, value) {
+  const sheet = getOrCreateSheet(ss, "Settings", ["Key", "Value"]);
+  const data  = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === key) {
+      sheet.getRange(i + 1, 2).setValue(value);
+      return;
+    }
+  }
+  sheet.appendRow([key, value]);
+}
+
+// Rewrites all data rows below the header. Destructive by design — the app
+// sends the complete list each save (fine for a single user).
+function rewriteRows(ss, name, headers, rows) {
+  const sheet = getOrCreateSheet(ss, name, headers);
+  const last  = sheet.getLastRow();
+  if (last > 1) sheet.getRange(2, 1, last - 1, sheet.getLastColumn()).clearContent();
+  if (rows.length) sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
+}
+
+// ─── Net worth snapshot (run monthly via time-driven trigger) ─────────────────
+
+function snapshotNetWorth() {
+  const ss    = openSpreadsheet();
+  const asset = ss.getSheetByName("Assets");
+  if (!asset) return;
+
+  const rows = asset.getDataRange().getValues().slice(1);
+  let assets = 0, liabilities = 0;
+  rows.forEach(r => {
+    const value = Number(r[1]) || 0;
+    if (String(r[2]).toLowerCase() === "liability") liabilities += value;
+    else if (r[0]) assets += value;
+  });
+
+  const history = getOrCreateSheet(ss, "NetWorthHistory", ["Date", "Assets", "Liabilities", "Net"]);
+  const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+  history.appendRow([date, assets, liabilities, assets - liabilities]);
+}
+
+// Run once from the editor to install the monthly snapshot trigger.
+function setupTriggers() {
+  const exists = ScriptApp.getProjectTriggers()
+    .some(t => t.getHandlerFunction() === "snapshotNetWorth");
+  if (!exists) {
+    ScriptApp.newTrigger("snapshotNetWorth")
+      .timeBased().onMonthDay(1).atHour(6)
+      .create();
   }
 }
 
