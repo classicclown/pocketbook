@@ -77,9 +77,11 @@ export const getMonths = (transactions) => {
 
 // Only positive (debit) amounts are spending. Negative amounts are credits —
 // refunds, reimbursements, and credit-card payments — and must not cancel out
-// real spend, otherwise monthly totals collapse toward zero.
+// real spend, otherwise monthly totals collapse toward zero. Transfers
+// (credit-card settlements, EFT moves between accounts) are money movement,
+// not consumption, so they are excluded from spend totals too.
 export const totalExpenses = (transactions) =>
-  transactions.filter(t => t.category !== "Income")
+  transactions.filter(t => t.category !== "Income" && t.category !== "Transfer")
     .reduce((a, t) => a + (t.amount > 0 ? t.amount : 0), 0);
 
 export const sumByCategory = (transactions) =>

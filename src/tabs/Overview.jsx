@@ -13,6 +13,8 @@ import {
   filterByMonth, totalExpenses, sumByCategory,
   calcNetWorth, fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
+import { projectMonth } from "../utils/projection";
+import { useTags } from "../hooks/useTags";
 
 function greeting() {
   const h = new Date().getHours();
@@ -27,7 +29,6 @@ export default function Overview({ transactions, budgets, assets }) {
   const chart = useChartDefaults();
   const nowYear     = new Date().getFullYear();
   const nowMonth    = new Date().getMonth() + 1;
-  const nowDay      = new Date().getDate();
   const prevMonth   = nowMonth === 1 ? 12 : nowMonth - 1;
   const prevYear    = nowMonth === 1 ? nowYear - 1 : nowYear;
 
@@ -58,10 +59,14 @@ export default function Overview({ transactions, budgets, assets }) {
     return all;
   }, [transactions, nowYear, nowMonth]);
 
-  // Projected spend
-  const daysInMonth = new Date(nowYear, nowMonth, 0).getDate();
-  const dayOfMonth  = nowDay;
-  const projected   = dayOfMonth > 0 ? (spent / dayOfMonth) * daysInMonth : spent;
+  // Projected spend — daily run rate extrapolated to month-end, one-offs excluded
+  const { version: tagVersion, getTag } = useTags();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const proj = useMemo(
+    () => projectMonth(transactions, { year: nowYear, month: nowMonth, getTag }),
+    [transactions, nowYear, nowMonth, tagVersion]
+  );
+  const projected   = proj.projected;
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
   const projectedPct = totalBudget > 0 ? (projected / totalBudget) * 100 : 0;
 
@@ -159,8 +164,14 @@ export default function Overview({ transactions, budgets, assets }) {
             </div>
             <ProgressBar value={projectedPct} color={projectedPct > 90 ? T.red : T.accent} height={4} />
             <div style={{ fontSize: 11, color: T.sub, marginTop: 6 }}>
-              {projectedPct.toFixed(0)}% of monthly budget · {daysInMonth - dayOfMonth} days remaining
+              {projectedPct.toFixed(0)}% of monthly budget · {proj.daysInMonth - proj.elapsedDays} days remaining
+              {proj.oneOffSpent > 0 && " · one-offs not extrapolated"}
             </div>
+            {proj.lowConfidence && (
+              <div style={{ fontSize: 11, color: T.yellow, marginTop: 4 }}>
+                Early in the month — projection has low confidence
+              </div>
+            )}
           </Card>
 
           {/* 6-Month Bar Chart */}
@@ -191,6 +202,10 @@ export default function Overview({ transactions, budgets, assets }) {
               const actual = catSpend[cat] || 0;
               const pct    = limit > 0 ? (actual / limit) * 100 : 0;
               const over   = actual > limit;
+              const catProjected = proj.byCategory[cat]?.projected;
+              const projMarker = limit > 0 && catProjected > actual
+                ? (catProjected / limit) * 100
+                : null;
               return (
                 <div key={cat} style={{ marginBottom: 14 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -211,6 +226,7 @@ export default function Overview({ transactions, budgets, assets }) {
                     value={pct}
                     color={over ? T.red : `${T.accent}B3`}
                     height={3}
+                    marker={projMarker}
                   />
                 </div>
               );

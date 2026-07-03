@@ -9,22 +9,18 @@ import Chip from "../components/Chip";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
+import { useTags, DEFAULT_TAG_OPTIONS } from "../hooks/useTags";
+import { projectMonth } from "../utils/projection";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory, sumByVendor,
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
 
-const TAG_OPTIONS = ["Business", "Holiday", "One-off", "Irregular"];
-
-function txKey(t) {
-  return `tag_${t.date}_${t.vendor}_${t.amount}`;
-}
-
 function TransactionRow({ tx }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const key   = txKey(tx);
-  const tag   = localStorage.getItem(key);
+  const { getTag, setTag } = useTags();
+  const tag   = getTag(tx);
   const isIncome  = tx.category === "Income";
   const isUSD     = tx.currency === "USD";
 
@@ -80,17 +76,14 @@ function TransactionRow({ tx }) {
           </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Tag</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {TAG_OPTIONS.map(t2 => {
+            {DEFAULT_TAG_OPTIONS.map(t2 => {
               const active = tag === t2;
               return (
                 <button
                   key={t2}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (active) localStorage.removeItem(key);
-                    else localStorage.setItem(key, t2);
-                    // Force re-render by toggling expanded
-                    setExpanded(false); setTimeout(() => setExpanded(true), 10);
+                    setTag(tx, active ? null : t2);
                   }}
                   style={{
                     fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: T.radiusSm,
@@ -190,6 +183,15 @@ export default function Spending({ transactions, budgets }) {
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
+  // Current-month projection (daily run rate, one-offs not extrapolated)
+  const { version: tagVersion, getTag } = useTags();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const proj = useMemo(
+    () => projectMonth(transactions, { year: now.getFullYear(), month: now.getMonth() + 1, getTag }),
+    [transactions, currentYM, tagVersion]
+  );
+  const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
+
   // Monthly chart data
   const monthlyData = useMemo(() => months.slice().reverse().map(ym => {
     const [y, m] = ym.split("-").map(Number);
@@ -207,7 +209,7 @@ export default function Spending({ transactions, budgets }) {
   const drillData = useMemo(() => {
     if (!selectedMonth) return [];
     const fn = breakdown === "category" ? sumByCategory : sumByVendor;
-    const sums = fn(drillTx.filter(t => t.category !== "Income"));
+    const sums = fn(drillTx.filter(t => t.category !== "Income" && t.category !== "Transfer"));
     return Object.entries(sums)
       .sort((a, b) => b[1] - a[1])
       .map(([name, total]) => ({ name, total }));
@@ -284,6 +286,24 @@ export default function Spending({ transactions, budgets }) {
         </div>
       )}
 
+      {/* Current-month projection summary */}
+      {(!selectedMonth || selectedMonth === currentYM) && proj.spent > 0 && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+          fontSize: 12, color: T.sub, marginBottom: 12,
+        }}>
+          <span>
+            Projected this month:{" "}
+            <strong style={{ fontFamily: T.mono, color: totalBudget > 0 && proj.projected > totalBudget ? T.red : T.text }}>
+              {fmt(proj.projected)}
+            </strong>
+            {totalBudget > 0 && <span> of {fmt(totalBudget)} budget</span>}
+          </span>
+          <span>· {proj.daysInMonth - proj.elapsedDays} days left</span>
+          {proj.lowConfidence && <span style={{ color: T.yellow }}>· low confidence</span>}
+        </div>
+      )}
+
       {/* Chart or Table */}
       {view === "chart" ? (
         <Card>
@@ -308,6 +328,10 @@ export default function Spending({ transactions, budgets }) {
               {selectedMonth && breakdown === "category" && Object.entries(budgets).map(([cat, limit]) => (
                 <ReferenceLine key={cat} y={limit} stroke={T.border2} strokeDasharray="4 2" />
               ))}
+              {/* Projected month-end total on the monthly view */}
+              {!selectedMonth && proj.spent > 0 && (
+                <ReferenceLine y={proj.projected} stroke={T.yellow} strokeDasharray="4 2" />
+              )}
               <Bar
                 dataKey="total"
                 radius={[2, 2, 0, 0]}
