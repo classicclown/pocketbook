@@ -14,6 +14,7 @@ import {
   getMonths, filterByMonth, totalExpenses, sumByCategory,
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
+import { topMovers } from "../utils/insights";
 
 export default function Analysis({ transactions }) {
   const { T } = useTheme();
@@ -64,6 +65,31 @@ export default function Analysis({ transactions }) {
   const allCats = Array.from(new Set([...Object.keys(curCats), ...Object.keys(prevCats)])).sort();
 
   const DOT_COLORS = T.chartSeries;
+
+  const movers = useMemo(() => topMovers(transactions, curYM), [transactions, curYM]);
+
+  const MoverList = ({ title, items }) => (
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, marginBottom: 8 }}>{title}</div>
+      {items.length === 0 && <div style={{ fontSize: 12, color: T.sub }}>No changes yet.</div>}
+      {items.map(m => {
+        const up = m.delta > 0;
+        return (
+          <div key={m.name} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "7px 0", borderBottom: `1px solid ${T.border}`, gap: 12,
+          }}>
+            <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {m.name}
+            </span>
+            <span style={{ fontSize: 12, fontFamily: T.mono, color: up ? T.red : T.green, flexShrink: 0 }}>
+              {up ? "▲" : "▼"} {fmt(Math.abs(m.delta))}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 
   return (
     <div style={{ maxWidth: 960 }}>
@@ -159,6 +185,17 @@ export default function Analysis({ transactions }) {
         })}
       </Card>
       </div>
+
+      {/* Top movers vs last month */}
+      <Card style={{ marginTop: 12, marginBottom: 0 }}>
+        <SectionHeader right={`${monthLabel(prevYM)} → ${monthLabel(curYM)}`} style={{ marginBottom: 14 }}>
+          Top Movers
+        </SectionHeader>
+        <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+          <MoverList title="Categories" items={movers.categories} />
+          <MoverList title="Vendors" items={movers.vendors} />
+        </div>
+      </Card>
     </div>
   );
 }

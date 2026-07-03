@@ -10,6 +10,8 @@ import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
 import EnvelopeCard from "../components/EnvelopeCard";
+import DetailSheet from "../components/DetailSheet";
+import { CategoryDetail, MerchantDetail } from "../components/InsightDetails";
 import { useTags } from "../hooks/useTags";
 import { projectMonth } from "../utils/projection";
 import {
@@ -17,7 +19,7 @@ import {
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
 
-function TransactionRow({ tx }) {
+function TransactionRow({ tx, onInspectVendor }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const { getTag, setTag, options: tagOptions } = useTags();
@@ -44,7 +46,16 @@ function TransactionRow({ tx }) {
             {isIncome ? "💰" : isUSD ? "🌍" : "💳"}
           </span>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <div
+              onClick={onInspectVendor ? (e) => { e.stopPropagation(); onInspectVendor(tx.vendor); } : undefined}
+              title={onInspectVendor ? "Merchant insights" : undefined}
+              style={{
+                fontSize: 13, fontWeight: 600, color: T.text,
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                textDecoration: onInspectVendor ? "underline dotted" : "none",
+                textDecorationColor: T.border2, textUnderlineOffset: 3,
+              }}
+            >
               {tx.vendor}
             </div>
             <div style={{ fontSize: 11, color: T.sub }}>
@@ -107,7 +118,7 @@ function TransactionRow({ tx }) {
 
 // Collapsible header used for both the Category (depth 0) and Sub-category
 // (depth 1) levels of the transactions accordion.
-function GroupHeader({ label, total, count, depth, open, onClick }) {
+function GroupHeader({ label, total, count, depth, open, onClick, onLabelClick }) {
   const { T } = useTheme();
   const isTop = depth === 0;
   return (
@@ -125,14 +136,20 @@ function GroupHeader({ label, total, count, depth, open, onClick }) {
           fontSize: 9, color: T.sub, width: 9, flexShrink: 0,
           transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s",
         }}>▶</span>
-        <span style={{
-          fontSize: isTop ? 13 : 12,
-          fontWeight: isTop ? 700 : 600,
-          color: isTop ? T.text : T.sub,
-          textTransform: isTop ? "uppercase" : "none",
-          letterSpacing: isTop ? 0.5 : 0,
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}>{label}</span>
+        <span
+          onClick={onLabelClick ? (e) => { e.stopPropagation(); onLabelClick(); } : undefined}
+          title={onLabelClick ? "Category insights" : undefined}
+          style={{
+            fontSize: isTop ? 13 : 12,
+            fontWeight: isTop ? 700 : 600,
+            color: isTop ? T.text : T.sub,
+            textTransform: isTop ? "uppercase" : "none",
+            letterSpacing: isTop ? 0.5 : 0,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            textDecoration: onLabelClick ? "underline dotted" : "none",
+            textDecorationColor: T.border2, textUnderlineOffset: 3,
+          }}
+        >{label}</span>
         <span style={{ fontSize: 10, color: T.sub, flexShrink: 0 }}>· {count}</span>
       </div>
       <span style={{ fontSize: isTop ? 13 : 12, fontWeight: 600, fontFamily: T.mono, color: T.text, flexShrink: 0 }}>
@@ -143,29 +160,34 @@ function GroupHeader({ label, total, count, depth, open, onClick }) {
 }
 
 // Level 2: a sub-category. Expands to reveal the individual vendor transactions.
-function SubGroup({ sub }) {
+function SubGroup({ sub, onInspectVendor }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
       <GroupHeader label={sub.name} total={sub.total} count={sub.count} depth={1} open={open} onClick={() => setOpen(o => !o)} />
       {open && (
         <div style={{ paddingLeft: 16 }}>
-          {sub.items.map((tx, i) => <TransactionRow key={i} tx={tx} />)}
+          {sub.items.map((tx, i) => <TransactionRow key={i} tx={tx} onInspectVendor={onInspectVendor} />)}
         </div>
       )}
     </div>
   );
 }
 
-// Level 1: a category. Expands to reveal its sub-categories.
-function CategoryGroup({ cat }) {
+// Level 1: a category. Expands to reveal its sub-categories; the label itself
+// opens the category insight panel.
+function CategoryGroup({ cat, onInspect, onInspectVendor }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
-      <GroupHeader label={cat.name} total={cat.total} count={cat.count} depth={0} open={open} onClick={() => setOpen(o => !o)} />
+      <GroupHeader
+        label={cat.name} total={cat.total} count={cat.count} depth={0}
+        open={open} onClick={() => setOpen(o => !o)}
+        onLabelClick={onInspect}
+      />
       {open && (
         <div style={{ paddingLeft: 16 }}>
-          {cat.subs.map(sub => <SubGroup key={sub.name} sub={sub} />)}
+          {cat.subs.map(sub => <SubGroup key={sub.name} sub={sub} onInspectVendor={onInspectVendor} />)}
         </div>
       )}
     </div>
@@ -178,6 +200,7 @@ export default function Spending({ transactions, budgets, settings }) {
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
+  const [detail,       setDetail]       = useState(null);       // { type: "category"|"vendor", name }
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
 
@@ -468,9 +491,40 @@ export default function Spending({ transactions, budgets, settings }) {
             No transactions to show.
           </div>
         ) : (
-          categoryTree.map(cat => <CategoryGroup key={cat.name} cat={cat} />)
+          categoryTree.map(cat => (
+            <CategoryGroup
+              key={cat.name}
+              cat={cat}
+              onInspect={() => setDetail({ type: "category", name: cat.name })}
+              onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
+            />
+          ))
         )}
       </Card>
+
+      {/* Insight drill-down */}
+      {detail && (
+        <DetailSheet
+          title={detail.name}
+          subtitle={detail.type === "category" ? "Category insights" : "Merchant insights"}
+          onClose={() => setDetail(null)}
+        >
+          {detail.type === "category" ? (
+            <CategoryDetail
+              transactions={transactions}
+              category={detail.name}
+              ym={selectedMonth || currentYM}
+              projected={(selectedMonth || currentYM) === currentYM ? proj.byCategory[detail.name]?.projected : null}
+            />
+          ) : (
+            <MerchantDetail
+              transactions={transactions}
+              vendor={detail.name}
+              ym={selectedMonth || currentYM}
+            />
+          )}
+        </DetailSheet>
+      )}
     </div>
   );
 }
