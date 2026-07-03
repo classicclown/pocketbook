@@ -1,4 +1,4 @@
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import { MONTH_LABELS } from "../utils/compute";
 
 const NAV_ITEMS = [
@@ -11,7 +11,31 @@ const NAV_ITEMS = [
 const now = new Date();
 const currentMonthLabel = `${MONTH_LABELS[now.getMonth()]} ${now.getFullYear()}`;
 
+// Temporary toggle until the Settings screen owns theme preference.
+function ThemeToggle({ compact }) {
+  const { T, mode, setPreference } = useTheme();
+  return (
+    <button
+      onClick={() => setPreference(mode === "dark" ? "light" : "dark")}
+      title={`Switch to ${mode === "dark" ? "light" : "dark"} mode`}
+      style={{
+        background: "none",
+        border: `1px solid ${T.border}`,
+        borderRadius: T.radius,
+        color: T.sub,
+        cursor: "pointer",
+        fontSize: compact ? 14 : 13,
+        padding: compact ? "4px 8px" : "6px 10px",
+        fontFamily: T.font,
+      }}
+    >
+      {mode === "dark" ? "☀" : "☾"}
+    </button>
+  );
+}
+
 export default function Layout({ children, activeTab, setActiveTab, isMobile }) {
+  const { T } = useTheme();
   return (
     <div style={{
       display: "flex",
@@ -75,10 +99,14 @@ export default function Layout({ children, activeTab, setActiveTab, isMobile }) 
             ))}
           </nav>
 
-          <div style={{ padding: "16px 24px", borderTop: `1px solid ${T.border}` }}>
+          <div style={{
+            padding: "16px 24px", borderTop: `1px solid ${T.border}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
             <div style={{ fontSize: 10, color: T.sub, textTransform: "uppercase", letterSpacing: 1.5 }}>
               {currentMonthLabel}
             </div>
+            <ThemeToggle />
           </div>
         </div>
       )}
@@ -91,6 +119,11 @@ export default function Layout({ children, activeTab, setActiveTab, isMobile }) 
         minHeight: "100vh",
         boxSizing: "border-box",
       }}>
+        {isMobile && (
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+            <ThemeToggle compact />
+          </div>
+        )}
         {children}
       </main>
 

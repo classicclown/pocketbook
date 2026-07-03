@@ -1,7 +1,8 @@
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import { fmt } from "../utils/compute";
 
 export default function CustomTooltip({ active, payload, label, currency = "ZAR" }) {
+  const { T } = useTheme();
   if (!active || !payload || !payload.length) return null;
   return (
     <div style={{
@@ -9,7 +10,7 @@ export default function CustomTooltip({ active, payload, label, currency = "ZAR"
       border: `1px solid ${T.border}`,
       borderRadius: T.radiusSm,
       padding: "8px 10px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+      boxShadow: T.shadow,
       fontFamily: T.font,
     }}>
       <div style={{ fontSize: 11, color: T.sub, marginBottom: 4 }}>{label}</div>

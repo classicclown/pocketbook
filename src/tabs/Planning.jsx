@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import ProgressBar from "../components/ProgressBar";
 import CustomTooltip from "../components/CustomTooltip";
@@ -9,10 +9,11 @@ import {
   fmt, MONTH_LABELS,
 } from "../utils/compute";
 
+// Goal colors are token keys, resolved against the active theme at render time.
 const GOALS = [
-  { name: "Emergency Fund", target: 20000, saved: 14500, deadline: "Mar 2027", icon: "🛡️", color: T.green },
-  { name: "Holiday",        target: 8000,  saved: 3200,  deadline: "Dec 2026", icon: "✈️", color: T.accent },
-  { name: "New Laptop",     target: 3500,  saved: 1200,  deadline: "Sep 2026", icon: "💻", color: "#7C6FCD" },
+  { name: "Emergency Fund", target: 20000, saved: 14500, deadline: "Mar 2027", icon: "🛡️", color: "green" },
+  { name: "Holiday",        target: 8000,  saved: 3200,  deadline: "Dec 2026", icon: "✈️", color: "accent" },
+  { name: "New Laptop",     target: 3500,  saved: 1200,  deadline: "Sep 2026", icon: "💻", color: "yellow" },
 ];
 
 const MILESTONES = [
@@ -29,11 +30,13 @@ function monthsUntil(deadlineStr) {
 }
 
 function GoalCard({ goal }) {
+  const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const pct       = Math.min(100, (goal.saved / goal.target) * 100);
   const remaining = goal.target - goal.saved;
   const months    = monthsUntil(goal.deadline);
   const monthly   = remaining / months;
+  const color     = T[goal.color] || goal.color;
 
   return (
     <Card style={{ cursor: "pointer" }} >
@@ -46,14 +49,14 @@ function GoalCard({ goal }) {
               <div style={{ fontSize: 11, color: T.sub }}>{goal.deadline}</div>
             </div>
           </div>
-          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: T.mono, color: goal.color }}>
+          <div style={{ fontSize: 28, fontWeight: 700, fontFamily: T.mono, color }}>
             {pct.toFixed(0)}%
           </div>
         </div>
         <div style={{ fontSize: 12, fontFamily: T.mono, color: T.sub, marginBottom: 8 }}>
           {fmt(goal.saved)} <span style={{ color: T.border2 }}>/</span> {fmt(goal.target)}
         </div>
-        <ProgressBar value={pct} color={goal.color} height={4} />
+        <ProgressBar value={pct} color={color} height={4} />
       </div>
 
       {expanded && (
@@ -79,6 +82,7 @@ function GoalCard({ goal }) {
 }
 
 export default function Planning({ transactions, assets }) {
+  const { T } = useTheme();
   const { netWorth } = useMemo(() => calcNetWorth(assets), [assets]);
 
   const months = useMemo(() => getMonths(transactions), [transactions]);

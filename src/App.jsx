@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { T } from "./tokens";
+import { useTheme } from "./theme/ThemeContext";
 import Layout from "./components/Layout";
 import Overview from "./tabs/Overview";
 import Spending from "./tabs/Spending";
@@ -8,6 +8,7 @@ import Planning from "./tabs/Planning";
 import { useSheetData } from "./hooks/useSheetData";
 
 function LoadingState() {
+  const { T } = useTheme();
   return (
     <div style={{ maxWidth: 800 }}>
       {[200, 120, 80, 160].map((w, i) => (
@@ -26,6 +27,7 @@ function LoadingState() {
 }
 
 function ErrorState({ error, onRetry }) {
+  const { T } = useTheme();
   return (
     <div style={{ textAlign: "center", paddingTop: 80, fontFamily: T.font }}>
       <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>

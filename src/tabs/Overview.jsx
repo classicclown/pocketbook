@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import ProgressBar from "../components/ProgressBar";
 import StatCard from "../components/StatCard";
@@ -18,6 +18,7 @@ function greeting() {
 }
 
 export default function Overview({ transactions, budgets, assets, isMobile }) {
+  const { T } = useTheme();
   const nowYear     = new Date().getFullYear();
   const nowMonth    = new Date().getMonth() + 1;
   const nowDay      = new Date().getDate();
@@ -77,25 +78,25 @@ export default function Overview({ transactions, budgets, assets, isMobile }) {
 
       {/* Net Worth Banner */}
       <div style={{
-        background: T.text,
+        background: T.heroBg,
         borderRadius: T.radius,
         padding: "20px 24px",
         marginBottom: 12,
       }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.heroSub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
           Net Worth
         </div>
-        <div style={{ fontSize: 38, fontWeight: 700, fontFamily: T.mono, color: "#FFFFFF", marginBottom: 12, lineHeight: 1 }}>
+        <div style={{ fontSize: 38, fontWeight: 700, fontFamily: T.mono, color: T.heroText, marginBottom: 12, lineHeight: 1 }}>
           {fmt(netWorth)}
         </div>
         <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
           <div>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginRight: 6 }}>Assets</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#FFFFFF", fontFamily: T.mono }}>{fmt(totalAssets)}</span>
+            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Assets</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalAssets)}</span>
           </div>
           <div>
-            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", marginRight: 6 }}>Liabilities</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#FFFFFF", fontFamily: T.mono }}>{fmt(totalLiabilities)}</span>
+            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Liabilities</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalLiabilities)}</span>
           </div>
         </div>
       </div>
@@ -176,7 +177,7 @@ export default function Overview({ transactions, budgets, assets, isMobile }) {
                 <Tooltip content={<CustomTooltip />} />
                 <Bar dataKey="total" radius={[2, 2, 0, 0]}>
                   {last6.map((entry, i) => (
-                    <Cell key={i} fill={entry.ym === currentYM ? T.accent : T.border2} />
+                    <Cell key={i} fill={entry.ym === currentYM ? T.accent : T.chartMuted} />
                   ))}
                 </Bar>
               </BarChart>

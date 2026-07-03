@@ -1,6 +1,7 @@
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function StatCard({ label, value, subValue, subColor }) {
+  const { T } = useTheme();
   return (
     <div style={{
       background: T.surface,

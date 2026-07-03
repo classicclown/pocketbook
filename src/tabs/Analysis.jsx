@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import {
   LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid,
 } from "recharts";
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import CustomTooltip from "../components/CustomTooltip";
 import {
@@ -11,6 +11,7 @@ import {
 } from "../utils/compute";
 
 function Chip({ label, active, onClick }) {
+  const { T } = useTheme();
   return (
     <button onClick={onClick} style={{
       fontSize: 12, fontWeight: active ? 600 : 400,
@@ -26,6 +27,7 @@ function Chip({ label, active, onClick }) {
 }
 
 export default function Analysis({ transactions }) {
+  const { T } = useTheme();
   const [metric, setMetric] = useState("spending");
 
   const months = useMemo(() => getMonths(transactions).slice().reverse(), [transactions]);
@@ -70,7 +72,7 @@ export default function Analysis({ transactions }) {
 
   const allCats = Array.from(new Set([...Object.keys(curCats), ...Object.keys(prevCats)])).sort();
 
-  const DOT_COLORS = [T.accent, T.green, "#7C6FCD", T.yellow, "#4A90D9", "#E87040", "#2DA89B", "#C14065"];
+  const DOT_COLORS = T.chartSeries;
 
   return (
     <div style={{ maxWidth: 800 }}>

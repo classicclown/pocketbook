@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import {
   BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine,
 } from "recharts";
-import { T } from "../tokens";
+import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import CustomTooltip from "../components/CustomTooltip";
 import {
@@ -17,6 +17,7 @@ function txKey(t) {
 }
 
 function TransactionRow({ tx }) {
+  const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const key   = txKey(tx);
   const tag   = localStorage.getItem(key);
@@ -109,6 +110,7 @@ function TransactionRow({ tx }) {
 // Collapsible header used for both the Category (depth 0) and Sub-category
 // (depth 1) levels of the transactions accordion.
 function GroupHeader({ label, total, count, depth, open, onClick }) {
+  const { T } = useTheme();
   const isTop = depth === 0;
   return (
     <div
@@ -173,6 +175,7 @@ function CategoryGroup({ cat }) {
 }
 
 function Chip({ label, active, onClick }) {
+  const { T } = useTheme();
   return (
     <button
       onClick={onClick}
@@ -191,6 +194,7 @@ function Chip({ label, active, onClick }) {
 }
 
 export default function Spending({ transactions, budgets }) {
+  const { T } = useTheme();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
@@ -258,7 +262,7 @@ export default function Spending({ transactions, budgets }) {
   const barColor = (ym) => {
     if (ym === selectedMonth) return T.accent;
     if (ym === currentYM && !selectedMonth) return T.yellow;
-    return T.border2;
+    return T.chartMuted;
   };
 
   return (
