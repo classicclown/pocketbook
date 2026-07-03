@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
 import { useIsMobile } from "../hooks/useMediaQuery";
@@ -15,6 +15,7 @@ import {
 } from "../utils/compute";
 import { projectMonth } from "../utils/projection";
 import { useTags } from "../hooks/useTags";
+import { detectRecurring, upcomingRecurringTotal, excludeRecurringVendor } from "../utils/recurring";
 
 function greeting() {
   const h = new Date().getHours();
@@ -73,6 +74,19 @@ export default function Overview({ transactions, budgets, assets }) {
   // Budget vs actual
   const catSpend = useMemo(() => sumByCategory(currentTx.filter(t => t.category !== "Income")), [currentTx]);
 
+  // Recurring bills + left-to-spend (Simplifi-style spending plan)
+  const [recurringVersion, setRecurringVersion] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const recurring = useMemo(() => detectRecurring(transactions), [transactions, recurringVersion]);
+  const upcomingBills = useMemo(() => upcomingRecurringTotal(recurring), [recurring]);
+  const leftToSpend = income - spent - upcomingBills;
+  const recurringMonthly = recurring.reduce((s, r) => s + r.avgAmount, 0);
+
+  const dismissRecurring = (vendor) => {
+    excludeRecurringVendor(vendor);
+    setRecurringVersion(v => v + 1);
+  };
+
   const currentYM = `${nowYear}-${String(nowMonth).padStart(2, "0")}`;
 
   return (
@@ -125,6 +139,27 @@ export default function Overview({ transactions, budgets, assets }) {
           subColor={savingsRate >= 30 ? T.green : savingsRate >= 15 ? T.yellow : T.red}
         />
       </div>
+
+      {/* Left to spend — income minus spend so far minus expected bills */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
+          <div>
+            <SectionHeader style={{ marginBottom: 6 }}>Left to Spend</SectionHeader>
+            <div style={{ fontSize: 28, fontWeight: 700, fontFamily: T.mono, color: leftToSpend >= 0 ? T.green : T.red, lineHeight: 1 }}>
+              {leftToSpend < 0 && "−"}{fmt(Math.abs(leftToSpend))}
+            </div>
+          </div>
+          <div style={{ fontSize: 11, color: T.sub, textAlign: "right" }}>
+            {fmt(income)} income − {fmt(spent)} spent
+            {upcomingBills > 0 && <> − {fmt(upcomingBills)} upcoming bills</>}
+          </div>
+        </div>
+        {income === 0 && (
+          <div style={{ fontSize: 11, color: T.yellow, marginTop: 8 }}>
+            No income recorded this month yet — treat this as spend only.
+          </div>
+        )}
+      </Card>
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
         {/* Left column */}
@@ -192,9 +227,9 @@ export default function Overview({ transactions, budgets, assets }) {
           </Card>
         </div>
 
-        {/* Right column — Budget vs Actual */}
+        {/* Right column — Budget vs Actual + Recurring */}
         <div>
-          <Card style={{ marginBottom: 0 }}>
+          <Card>
             <SectionHeader right={monthLabel(currentYM)} style={{ marginBottom: 16 }}>
               Budget vs Actual
             </SectionHeader>
@@ -231,6 +266,53 @@ export default function Overview({ transactions, budgets, assets }) {
                 </div>
               );
             })}
+          </Card>
+
+          {/* Recurring bills & subscriptions */}
+          <Card style={{ marginBottom: 0 }}>
+            <SectionHeader right={recurring.length ? `${fmt(recurringMonthly)} / month` : null}>
+              Recurring
+            </SectionHeader>
+            {recurring.length === 0 ? (
+              <div style={{ fontSize: 12, color: T.sub }}>
+                No recurring charges detected yet — needs a few months of history.
+              </div>
+            ) : (
+              recurring.map(r => (
+                <div key={r.vendor} style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  padding: "8px 0", borderBottom: `1px solid ${T.border}`, gap: 10,
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {r.vendor}
+                      {r.priceChanged && (
+                        <span style={{
+                          marginLeft: 6, fontSize: 9, fontWeight: 700, color: T.yellow,
+                          background: `${T.yellow}18`, padding: "1px 5px", borderRadius: 2, letterSpacing: 0.5,
+                        }}>PRICE ↑</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11, color: T.sub }}>
+                      {r.category} · next ~{r.nextExpectedDate}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>{fmt(r.avgAmount)}</span>
+                    <button
+                      onClick={() => dismissRecurring(r.vendor)}
+                      title="Not recurring — hide"
+                      style={{
+                        background: "none", border: "none", color: T.sub,
+                        cursor: "pointer", fontSize: 11, padding: 2, lineHeight: 1,
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </Card>
         </div>
       </div>
