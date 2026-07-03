@@ -67,7 +67,45 @@ function SaveStatus({ status }) {
   return <span style={{ fontSize: 11, color }}>{status}</span>;
 }
 
-export default function Settings({ transactions, budgets, settings, saveSetting, saveBudgets, isMock }) {
+function SaveButton({ enabled, onClick }) {
+  const { T } = useTheme();
+  return (
+    <button
+      onClick={onClick}
+      disabled={!enabled}
+      style={{
+        fontSize: 12, fontWeight: 600, padding: "6px 16px",
+        borderRadius: T.radius, border: "none", fontFamily: T.font,
+        background: enabled ? T.accent : T.dim,
+        color: enabled ? "#fff" : T.sub,
+        cursor: enabled ? "pointer" : "default",
+      }}
+    >
+      Save
+    </button>
+  );
+}
+
+function AddRowButton({ label, onClick }) {
+  const { T } = useTheme();
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize: 12, fontWeight: 600, padding: "6px 14px",
+        borderRadius: T.radius, border: `1px dashed ${T.border2}`,
+        background: "transparent", color: T.sub, cursor: "pointer", fontFamily: T.font,
+      }}
+    >
+      + {label}
+    </button>
+  );
+}
+
+export default function Settings({
+  transactions, budgets, settings, goals, watchlists,
+  saveSetting, saveBudgets, saveGoals, saveWatchlists, isMock,
+}) {
   const { T, preference, setPreference } = useTheme();
   useTags(); // re-render when tag options change
 
@@ -128,6 +166,53 @@ export default function Settings({ transactions, budgets, settings, saveSetting,
     }
   };
 
+  // ── Goals editor ─────────────────────────────────────────────────────────
+  const [goalDraft, setGoalDraft] = useState([]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setGoalDraft(goals.map(g => ({ ...g }))); }, [goals]);
+  const goalsDirty = JSON.stringify(goalDraft) !== JSON.stringify(goals);
+  const [goalStatus, setGoalStatus] = useState(null);
+
+  const handleSaveGoals = async () => {
+    const cleaned = goalDraft
+      .filter(g => g.name.trim())
+      .map(g => ({ ...g, name: g.name.trim(), target: parseFloat(g.target) || 0, saved: parseFloat(g.saved) || 0 }));
+    setGoalStatus("Saving…");
+    try {
+      await saveGoals(cleaned);
+      setGoalStatus("Saved");
+      setTimeout(() => setGoalStatus(null), 2500);
+    } catch (e) {
+      setGoalStatus(e.message || "Save failed");
+    }
+  };
+
+  // ── Watchlists editor ────────────────────────────────────────────────────
+  const [watchDraft, setWatchDraft] = useState([]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setWatchDraft(watchlists.map(w => ({ ...w }))); }, [watchlists]);
+  const watchDirty = JSON.stringify(watchDraft) !== JSON.stringify(watchlists);
+  const [watchStatus, setWatchStatus] = useState(null);
+
+  const vendors = useMemo(
+    () => Array.from(new Set(transactions.map(t => t.vendor).filter(Boolean))).sort(),
+    [transactions]
+  );
+
+  const handleSaveWatchlists = async () => {
+    const cleaned = watchDraft
+      .filter(w => w.name.trim() && w.match.trim())
+      .map(w => ({ ...w, name: w.name.trim(), match: w.match.trim(), monthlyLimit: parseFloat(w.monthlyLimit) || 0 }));
+    setWatchStatus("Saving…");
+    try {
+      await saveWatchlists(cleaned);
+      setWatchStatus("Saved");
+      setTimeout(() => setWatchStatus(null), 2500);
+    } catch (e) {
+      setWatchStatus(e.message || "Save failed");
+    }
+  };
+
   // ── Tag options ──────────────────────────────────────────────────────────
   const customTags = getCustomTagOptions();
   const [newTag, setNewTag] = useState("");
@@ -183,19 +268,7 @@ export default function Settings({ transactions, budgets, settings, saveSetting,
             <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>Monthly allocations</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <SaveStatus status={budgetStatus} />
-              <button
-                onClick={handleSaveBudgets}
-                disabled={!dirty || isMock}
-                style={{
-                  fontSize: 12, fontWeight: 600, padding: "6px 16px",
-                  borderRadius: T.radius, border: "none", fontFamily: T.font,
-                  background: dirty && !isMock ? T.accent : T.dim,
-                  color: dirty && !isMock ? "#fff" : T.sub,
-                  cursor: dirty && !isMock ? "pointer" : "default",
-                }}
-              >
-                Save
-              </button>
+              <SaveButton enabled={dirty && !isMock} onClick={handleSaveBudgets} />
             </div>
           </div>
           {isMock && (
@@ -223,6 +296,152 @@ export default function Settings({ transactions, budgets, settings, saveSetting,
           <div style={{ fontSize: 11, color: T.sub, marginTop: 10 }}>
             Amounts double as budget limits and envelope allocations. Leave blank to untrack a category.
           </div>
+        </div>
+      </Card>
+
+      {/* Goals */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <SectionHeader style={{ marginBottom: 0 }}>Savings Goals</SectionHeader>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SaveStatus status={goalStatus} />
+            <SaveButton enabled={goalsDirty && !isMock} onClick={handleSaveGoals} />
+          </div>
+        </div>
+        {goalDraft.map((g, i) => (
+          <div key={i} style={{
+            display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+            padding: "8px 0", borderBottom: `1px solid ${T.border}`,
+          }}>
+            <input
+              value={g.icon}
+              onChange={e => setGoalDraft(d => d.map((x, j) => j === i ? { ...x, icon: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 44, textAlign: "center", fontFamily: T.font }}
+              title="Icon"
+            />
+            <input
+              value={g.name}
+              placeholder="Goal name"
+              onChange={e => setGoalDraft(d => d.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, flex: 1, minWidth: 120, textAlign: "left", fontFamily: T.font }}
+            />
+            <input
+              type="number" min="0"
+              value={g.target}
+              placeholder="Target"
+              onChange={e => setGoalDraft(d => d.map((x, j) => j === i ? { ...x, target: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 90 }}
+              title="Target amount"
+            />
+            <input
+              type="number" min="0"
+              value={g.saved}
+              placeholder="Saved"
+              onChange={e => setGoalDraft(d => d.map((x, j) => j === i ? { ...x, saved: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 90 }}
+              title="Saved so far"
+            />
+            <input
+              value={g.deadline}
+              placeholder="Mar 2027"
+              onChange={e => setGoalDraft(d => d.map((x, j) => j === i ? { ...x, deadline: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 90, fontFamily: T.font }}
+              title="Deadline"
+            />
+            <button
+              onClick={() => setGoalDraft(d => d.filter((_, j) => j !== i))}
+              disabled={isMock}
+              title="Remove goal"
+              style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, padding: 2 }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <div style={{ marginTop: 10 }}>
+          <AddRowButton
+            label="Add goal"
+            onClick={() => setGoalDraft(d => [...d, { name: "", target: "", saved: "", deadline: "", icon: "🎯" }])}
+          />
+        </div>
+      </Card>
+
+      {/* Watchlists */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <SectionHeader style={{ marginBottom: 0 }}>Watchlists</SectionHeader>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SaveStatus status={watchStatus} />
+            <SaveButton enabled={watchDirty && !isMock} onClick={handleSaveWatchlists} />
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: T.sub, marginBottom: 10 }}>
+          Watch a vendor or category against its own monthly limit, shown on the Spending screen.
+        </div>
+        {watchDraft.map((w, i) => (
+          <div key={i} style={{
+            display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+            padding: "8px 0", borderBottom: `1px solid ${T.border}`,
+          }}>
+            <input
+              value={w.name}
+              placeholder="Name"
+              onChange={e => setWatchDraft(d => d.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, flex: 1, minWidth: 100, textAlign: "left", fontFamily: T.font }}
+            />
+            <select
+              value={w.type}
+              onChange={e => setWatchDraft(d => d.map((x, j) => j === i ? { ...x, type: e.target.value, match: "" } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 100, textAlign: "left", fontFamily: T.font }}
+            >
+              <option value="category">Category</option>
+              <option value="vendor">Vendor</option>
+            </select>
+            <input
+              value={w.match}
+              placeholder={w.type === "vendor" ? "Vendor name" : "Category name"}
+              list={w.type === "vendor" ? "pb-vendors" : "pb-categories"}
+              onChange={e => setWatchDraft(d => d.map((x, j) => j === i ? { ...x, match: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, flex: 1, minWidth: 130, textAlign: "left", fontFamily: T.font }}
+            />
+            <input
+              type="number" min="0"
+              value={w.monthlyLimit}
+              placeholder="Limit"
+              onChange={e => setWatchDraft(d => d.map((x, j) => j === i ? { ...x, monthlyLimit: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 90 }}
+              title="Monthly limit"
+            />
+            <button
+              onClick={() => setWatchDraft(d => d.filter((_, j) => j !== i))}
+              disabled={isMock}
+              title="Remove watchlist"
+              style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, padding: 2 }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <datalist id="pb-vendors">
+          {vendors.map(v => <option key={v} value={v} />)}
+        </datalist>
+        <datalist id="pb-categories">
+          {categories.map(c => <option key={c} value={c} />)}
+        </datalist>
+        <div style={{ marginTop: 10 }}>
+          <AddRowButton
+            label="Add watchlist"
+            onClick={() => setWatchDraft(d => [...d, { name: "", type: "category", match: "", monthlyLimit: "" }])}
+          />
         </div>
       </Card>
 

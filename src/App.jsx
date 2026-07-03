@@ -52,11 +52,11 @@ function ErrorState({ error, onRetry }) {
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const {
-    transactions, budgets, assets, settings,
-    loading, error, refetch, saveSetting, saveBudgets, isMock,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory,
+    loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, isMock,
   } = useSheetData();
 
-  const tabProps = { transactions, budgets, assets, settings };
+  const tabProps = { transactions, budgets, assets, settings, goals, watchlists, netWorthHistory };
 
   const renderTab = () => {
     if (loading) return <LoadingState />;
@@ -66,7 +66,16 @@ export default function App() {
       case "spending":  return <Spending  {...tabProps} />;
       case "analysis":  return <Analysis  {...tabProps} />;
       case "planning":  return <Planning  {...tabProps} />;
-      case "settings":  return <Settings  {...tabProps} saveSetting={saveSetting} saveBudgets={saveBudgets} isMock={isMock} />;
+      case "settings":  return (
+        <Settings
+          {...tabProps}
+          saveSetting={saveSetting}
+          saveBudgets={saveBudgets}
+          saveGoals={saveGoals}
+          saveWatchlists={saveWatchlists}
+          isMock={isMock}
+        />
+      );
       default:          return <Overview  {...tabProps} />;
     }
   };

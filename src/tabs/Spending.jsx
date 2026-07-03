@@ -194,7 +194,7 @@ function CategoryGroup({ cat, onInspect, onInspectVendor }) {
   );
 }
 
-export default function Spending({ transactions, budgets, settings }) {
+export default function Spending({ transactions, budgets, settings, watchlists = [] }) {
   const { T } = useTheme();
   const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
@@ -333,6 +333,27 @@ export default function Spending({ transactions, budgets, settings }) {
 
     return { cards, unallocated };
   }, [envelopeMode, envelopeYM, currentYM, transactions, budgets, proj]);
+
+  // Watchlists: month-to-date spend for watched vendors/categories
+  const watchCards = useMemo(() => {
+    if (!watchlists.length) return [];
+    const ym = selectedMonth || currentYM;
+    const [y, m] = ym.split("-").map(Number);
+    const monthTx = filterByMonth(transactions, y, m).filter(isSpend);
+    const isCurrent = ym === currentYM;
+    const runRate = isCurrent && proj.elapsedDays > 0 ? proj.daysInMonth / proj.elapsedDays : 1;
+    return watchlists.map(w => {
+      const spent = monthTx
+        .filter(t => (w.type === "vendor" ? t.vendor === w.match : t.category === w.match))
+        .reduce((s, t) => s + t.amount, 0);
+      return {
+        name: w.name,
+        allocated: w.monthlyLimit,
+        spent,
+        projected: isCurrent ? spent * runRate : undefined,
+      };
+    });
+  }, [watchlists, selectedMonth, currentYM, transactions, proj]);
 
   const barColor = (ym) => {
     if (ym === selectedMonth) return T.accent;
@@ -486,6 +507,28 @@ export default function Spending({ transactions, budgets, settings }) {
             {envelopes.unallocated > 0 && (
               <EnvelopeCard name="Unallocated" allocated={0} spent={envelopes.unallocated} muted />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Watchlists */}
+      {watchCards.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <SectionHeader right={monthLabel(selectedMonth || currentYM)}>Watchlists</SectionHeader>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 10,
+          }}>
+            {watchCards.map(w => (
+              <EnvelopeCard
+                key={w.name}
+                name={w.name}
+                allocated={w.allocated}
+                spent={w.spent}
+                projected={w.projected}
+              />
+            ))}
           </div>
         </div>
       )}

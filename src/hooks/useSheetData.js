@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   MOCK_TRANSACTIONS, MOCK_BUDGETS, MOCK_ASSETS,
+  MOCK_GOALS, MOCK_WATCHLISTS, MOCK_NETWORTH,
 } from "../utils/compute";
 import { fetchSheet, postAction, useMock } from "../api/sheet";
 
@@ -62,11 +63,42 @@ const parseSettings = (rows) => {
 
 const DEFAULT_SETTINGS = { envelopeMode: false, raw: {} };
 
+// Goals tab: Name | Target | Saved | Deadline | Icon. Deadline stays a display
+// string ("Mar 2027"); Sheets may hand back a Date cell, so normalize those.
+const parseGoals = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
+  name:     row[0] || "",
+  target:   parseFloat(row[1]) || 0,
+  saved:    parseFloat(row[2]) || 0,
+  deadline: row[3] instanceof Object || /^\d{4}-\d{2}-\d{2}T/.test(String(row[3]))
+    ? normalizeDate(row[3])
+    : String(row[3] ?? ""),
+  icon:     row[4] || "🎯",
+})).filter(g => g.name);
+
+// Watchlists tab: Name | Type (category|vendor) | Match | MonthlyLimit
+const parseWatchlists = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
+  name:         row[0] || "",
+  type:         String(row[1]).toLowerCase() === "vendor" ? "vendor" : "category",
+  match:        row[2] || "",
+  monthlyLimit: parseFloat(row[3]) || 0,
+})).filter(w => w.name && w.match);
+
+// NetWorthHistory tab: Date | Assets | Liabilities | Net
+const parseNetWorth = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
+  date:        normalizeDate(row[0]),
+  assets:      parseFloat(row[1]) || 0,
+  liabilities: parseFloat(row[2]) || 0,
+  net:         parseFloat(row[3]) || 0,
+})).filter(h => h.date).sort((a, b) => a.date.localeCompare(b.date));
+
 export function useSheetData() {
   const [transactions, setTransactions] = useState([]);
   const [budgets,      setBudgets]      = useState({});
   const [assets,       setAssets]       = useState([]);
   const [settings,     setSettings]     = useState(DEFAULT_SETTINGS);
+  const [goals,        setGoals]        = useState([]);
+  const [watchlists,   setWatchlists]   = useState([]);
+  const [netWorthHistory, setNetWorthHistory] = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
 
@@ -80,17 +112,26 @@ export function useSheetData() {
         setBudgets(MOCK_BUDGETS);
         setAssets(MOCK_ASSETS);
         setSettings(DEFAULT_SETTINGS);
+        setGoals(MOCK_GOALS);
+        setWatchlists(MOCK_WATCHLISTS);
+        setNetWorthHistory(MOCK_NETWORTH);
       } else {
-        const [txRows, budgetRows, assetRows, settingRows] = await Promise.all([
+        const [txRows, budgetRows, assetRows, settingRows, goalRows, watchlistRows, netWorthRows] = await Promise.all([
           fetchSheet("transactions"),
           fetchSheet("budgets"),
           fetchSheet("assets"),
           fetchSheet("settings"),
+          fetchSheet("goals"),
+          fetchSheet("watchlists"),
+          fetchSheet("networth"),
         ]);
         setTransactions(parseTransactions(txRows));
         setBudgets(parseBudgets(budgetRows));
         setAssets(parseAssets(assetRows));
         setSettings(parseSettings(settingRows));
+        setGoals(parseGoals(goalRows));
+        setWatchlists(parseWatchlists(watchlistRows));
+        setNetWorthHistory(parseNetWorth(netWorthRows));
       }
     } catch (e) {
       setError(e.message || "Failed to load data");
@@ -135,10 +176,34 @@ export function useSheetData() {
     }
   }, []);
 
+  const saveGoals = useCallback(async (next) => {
+    if (useMock) throw new Error("Not available in mock mode");
+    let previous;
+    setGoals(g => { previous = g; return next; });
+    try {
+      await postAction({ action: "setGoals", goals: next });
+    } catch (e) {
+      setGoals(previous);
+      throw e;
+    }
+  }, []);
+
+  const saveWatchlists = useCallback(async (next) => {
+    if (useMock) throw new Error("Not available in mock mode");
+    let previous;
+    setWatchlists(w => { previous = w; return next; });
+    try {
+      await postAction({ action: "setWatchlists", watchlists: next });
+    } catch (e) {
+      setWatchlists(previous);
+      throw e;
+    }
+  }, []);
+
   return {
-    transactions, budgets, assets, settings,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory,
     loading, error, refetch: load,
-    saveSetting, saveBudgets,
+    saveSetting, saveBudgets, saveGoals, saveWatchlists,
     isMock: useMock,
   };
 }

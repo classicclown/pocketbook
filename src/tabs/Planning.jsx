@@ -13,12 +13,8 @@ import {
   fmt, MONTH_LABELS,
 } from "../utils/compute";
 
-// Goal colors are token keys, resolved against the active theme at render time.
-const GOALS = [
-  { name: "Emergency Fund", target: 20000, saved: 14500, deadline: "Mar 2027", icon: "🛡️", color: "green" },
-  { name: "Holiday",        target: 8000,  saved: 3200,  deadline: "Dec 2026", icon: "✈️", color: "accent" },
-  { name: "New Laptop",     target: 3500,  saved: 1200,  deadline: "Sep 2026", icon: "💻", color: "yellow" },
-];
+// Goal colors are token keys assigned by position, resolved per theme.
+const GOAL_COLORS = ["green", "accent", "yellow", "red"];
 
 const MILESTONES = [
   { label: "First R50k net worth",   done: false, date: "Target: Dec 2026" },
@@ -26,21 +22,28 @@ const MILESTONES = [
   { label: "Pay off credit card",    done: true,  date: "Completed Apr 2026" },
 ];
 
+// Deadline can be "Mar 2027" (typed) or "2027-03-01" (a Sheets date cell).
 function monthsUntil(deadlineStr) {
-  const [mon, yr] = deadlineStr.split(" ");
-  const target = new Date(`${mon} 1, ${yr}`);
+  let target;
+  if (/^\d{4}-\d{2}/.test(deadlineStr)) {
+    target = new Date(deadlineStr + (deadlineStr.length === 7 ? "-01" : ""));
+  } else {
+    const [mon, yr] = deadlineStr.split(" ");
+    target = new Date(`${mon} 1, ${yr}`);
+  }
+  if (isNaN(target.getTime())) return 1;
   const now = new Date();
   return Math.max(1, (target.getFullYear() - now.getFullYear()) * 12 + (target.getMonth() - now.getMonth()));
 }
 
-function GoalCard({ goal }) {
+function GoalCard({ goal, colorKey }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
-  const pct       = Math.min(100, (goal.saved / goal.target) * 100);
+  const pct       = goal.target > 0 ? Math.min(100, (goal.saved / goal.target) * 100) : 0;
   const remaining = goal.target - goal.saved;
   const months    = monthsUntil(goal.deadline);
   const monthly   = remaining / months;
-  const color     = T[goal.color] || goal.color;
+  const color     = T[colorKey] || T.accent;
 
   return (
     <Card style={{ cursor: "pointer", marginBottom: 0 }} >
@@ -85,7 +88,7 @@ function GoalCard({ goal }) {
   );
 }
 
-export default function Planning({ transactions, assets }) {
+export default function Planning({ transactions, assets, goals = [], netWorthHistory = [] }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
   const chart = useChartDefaults();
@@ -107,42 +110,70 @@ export default function Planning({ transactions, assets }) {
     return total / last3.length;
   }, [months, transactions]);
 
-  // Forecast next 12 months
+  // Real history (monthly snapshots) followed by a 12-month forecast.
   const forecastData = useMemo(() => {
     const now = new Date();
-    return Array.from({ length: 13 }, (_, i) => {
+    const history = netWorthHistory.map(h => {
+      const d = new Date(h.date + "T00:00:00");
+      return {
+        label: `${MONTH_LABELS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+        actual: h.net,
+      };
+    });
+    const forecast = Array.from({ length: 13 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       const label = `${MONTH_LABELS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
       return {
         label,
         projected:    Math.round(netWorth + avgSavings * i),
         conservative: Math.round(netWorth + avgSavings * 0.8 * i),
+        // anchor the forecast lines to the last actual point
+        ...(i === 0 && history.length ? { actual: netWorth } : {}),
       };
     });
-  }, [netWorth, avgSavings]);
+    return [...history, ...forecast];
+  }, [netWorth, avgSavings, netWorthHistory]);
 
   return (
     <div style={{ maxWidth: 960 }}>
       <PageHeader title="Planning" />
 
-      {/* Savings Goals */}
+      {/* Savings Goals (from the Goals sheet tab, editable in Settings) */}
       <SectionHeader>Savings Goals</SectionHeader>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
-        {GOALS.map(g => <GoalCard key={g.name} goal={g} />)}
-      </div>
+      {goals.length === 0 ? (
+        <Card>
+          <div style={{ fontSize: 12, color: T.sub }}>
+            No goals yet — add them in Settings.
+          </div>
+        </Card>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 12 }}>
+          {goals.map((g, i) => (
+            <GoalCard key={g.name} goal={g} colorKey={GOAL_COLORS[i % GOAL_COLORS.length]} />
+          ))}
+        </div>
+      )}
 
       {/* Net Worth Forecast */}
       <SectionHeader style={{ margin: "20px 0 12px" }}>Net Worth Forecast</SectionHeader>
       <Card>
         <div style={{ fontSize: 12, color: T.sub, marginBottom: 4 }}>
-          Based on avg monthly savings of {fmt(Math.max(0, avgSavings))} over last 3 months
+          {netWorthHistory.length > 1 && `${netWorthHistory.length} months of history · `}
+          Forecast from avg monthly savings of {fmt(Math.max(0, avgSavings))} over last 3 months
         </div>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={forecastData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
             <XAxis dataKey="label" tick={{ ...chart.tick, fontSize: 9 }} axisLine={chart.axisLine} tickLine={chart.tickLine} interval={2} />
-            <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+            <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} domain={["auto", "auto"]} />
             <Tooltip content={<CustomTooltip />} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+            {netWorthHistory.length > 0 && (
+              <Line
+                type="monotone" dataKey="actual" name="Actual"
+                stroke={T.green} strokeWidth={2.5}
+                dot={{ fill: T.green, r: 2, strokeWidth: 0 }}
+              />
+            )}
             <Line
               type="monotone" dataKey="projected" name="Projected"
               stroke={T.yellow} strokeWidth={2} strokeDasharray="5 3"

@@ -64,6 +64,25 @@ export const MOCK_ASSETS = [
   { asset: "Credit Card",        value: 8500,   type: "liability" },
 ];
 
+export const MOCK_GOALS = [
+  { name: "Emergency Fund", target: 20000, saved: 14500, deadline: "Mar 2027", icon: "🛡️" },
+  { name: "Holiday",        target: 8000,  saved: 3200,  deadline: "Dec 2026", icon: "✈️" },
+  { name: "New Laptop",     target: 3500,  saved: 1200,  deadline: "Sep 2026", icon: "💻" },
+];
+
+export const MOCK_WATCHLISTS = [
+  { name: "Food delivery", type: "vendor",   match: "Mr D Food", monthlyLimit: 500 },
+  { name: "Coffee",        type: "vendor",   match: "Vida e Caffè", monthlyLimit: 300 },
+];
+
+export const MOCK_NETWORTH = [
+  { date: "2026-02-01", assets: 590000, liabilities: 472000, net: 118000 },
+  { date: "2026-03-01", assets: 598000, liabilities: 468000, net: 130000 },
+  { date: "2026-04-01", assets: 606000, liabilities: 464500, net: 141500 },
+  { date: "2026-05-01", assets: 612000, liabilities: 461000, net: 151000 },
+  { date: "2026-06-01", assets: 620000, liabilities: 458500, net: 161500 },
+];
+
 export const filterByMonth = (transactions, year, month) =>
   transactions.filter(t => {
     const d = new Date(t.date + "T00:00:00");
