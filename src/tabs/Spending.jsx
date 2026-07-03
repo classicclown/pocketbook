@@ -9,6 +9,7 @@ import Chip from "../components/Chip";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
+import EnvelopeCard from "../components/EnvelopeCard";
 import { useTags } from "../hooks/useTags";
 import { projectMonth } from "../utils/projection";
 import {
@@ -171,7 +172,7 @@ function CategoryGroup({ cat }) {
   );
 }
 
-export default function Spending({ transactions, budgets }) {
+export default function Spending({ transactions, budgets, settings }) {
   const { T } = useTheme();
   const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
@@ -246,6 +247,31 @@ export default function Spending({ transactions, budgets }) {
       }))
       .sort((a, b) => b.total - a.total);
   }, [visibleTx]);
+
+  // Envelope view: allocated vs spent per category for the viewed month
+  const envelopeMode = settings?.envelopeMode;
+  const envelopeYM = selectedMonth || currentYM;
+  const envelopes = useMemo(() => {
+    if (!envelopeMode) return null;
+    const [y, m] = envelopeYM.split("-").map(Number);
+    const monthTx = filterByMonth(transactions, y, m)
+      .filter(t => t.category !== "Income" && t.category !== "Transfer");
+    const spend = sumByCategory(monthTx);
+    const isCurrent = envelopeYM === currentYM;
+
+    const cards = Object.entries(budgets).map(([name, allocated]) => ({
+      name,
+      allocated,
+      spent: spend[name] || 0,
+      projected: isCurrent ? proj.byCategory[name]?.projected : undefined,
+    })).sort((a, b) => (b.spent / b.allocated) - (a.spent / a.allocated));
+
+    const unallocated = Object.entries(spend)
+      .filter(([name]) => !budgets[name])
+      .reduce((s, [, v]) => s + v, 0);
+
+    return { cards, unallocated };
+  }, [envelopeMode, envelopeYM, currentYM, transactions, budgets, proj]);
 
   const barColor = (ym) => {
     if (ym === selectedMonth) return T.accent;
@@ -378,8 +404,33 @@ export default function Spending({ transactions, budgets }) {
         </Card>
       )}
 
-      {/* Budget summary card (category drill-down only) */}
-      {selectedMonth && breakdown === "category" && (
+      {/* Envelopes (envelope mode replaces the budget summary) */}
+      {envelopes && envelopes.cards.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <SectionHeader right={monthLabel(envelopeYM)}>Envelopes</SectionHeader>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 10,
+          }}>
+            {envelopes.cards.map(env => (
+              <EnvelopeCard
+                key={env.name}
+                name={env.name}
+                allocated={env.allocated}
+                spent={env.spent}
+                projected={env.projected}
+              />
+            ))}
+            {envelopes.unallocated > 0 && (
+              <EnvelopeCard name="Unallocated" allocated={0} spent={envelopes.unallocated} muted />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Budget summary card (category drill-down only, non-envelope mode) */}
+      {!envelopeMode && selectedMonth && breakdown === "category" && (
         <Card>
           <SectionHeader>Budget Summary · {monthLabel(selectedMonth)}</SectionHeader>
           {drillData.map(({ name, total }) => {
