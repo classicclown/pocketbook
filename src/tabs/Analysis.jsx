@@ -16,6 +16,32 @@ import {
 } from "../utils/compute";
 import { topMovers } from "../utils/insights";
 
+function MoverList({ title, items }) {
+  const { T } = useTheme();
+  return (
+    <div style={{ flex: 1, minWidth: 220 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, marginBottom: 8 }}>{title}</div>
+      {items.length === 0 && <div style={{ fontSize: 12, color: T.sub }}>No changes yet.</div>}
+      {items.map(m => {
+        const up = m.delta > 0;
+        return (
+          <div key={m.name} style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            padding: "7px 0", borderBottom: `1px solid ${T.border}`, gap: 12,
+          }}>
+            <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {m.name}
+            </span>
+            <span style={{ fontSize: 12, fontFamily: T.mono, color: up ? T.red : T.green, flexShrink: 0 }}>
+              {up ? "▲" : "▼"} {fmt(Math.abs(m.delta))}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Analysis({ transactions }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
@@ -67,29 +93,6 @@ export default function Analysis({ transactions }) {
   const DOT_COLORS = T.chartSeries;
 
   const movers = useMemo(() => topMovers(transactions, curYM), [transactions, curYM]);
-
-  const MoverList = ({ title, items }) => (
-    <div style={{ flex: 1, minWidth: 220 }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, marginBottom: 8 }}>{title}</div>
-      {items.length === 0 && <div style={{ fontSize: 12, color: T.sub }}>No changes yet.</div>}
-      {items.map(m => {
-        const up = m.delta > 0;
-        return (
-          <div key={m.name} style={{
-            display: "flex", justifyContent: "space-between", alignItems: "center",
-            padding: "7px 0", borderBottom: `1px solid ${T.border}`, gap: 12,
-          }}>
-            <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {m.name}
-            </span>
-            <span style={{ fontSize: 12, fontFamily: T.mono, color: up ? T.red : T.green, flexShrink: 0 }}>
-              {up ? "▲" : "▼"} {fmt(Math.abs(m.delta))}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
 
   return (
     <div style={{ maxWidth: 960 }}>

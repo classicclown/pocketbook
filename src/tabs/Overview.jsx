@@ -61,11 +61,10 @@ export default function Overview({ transactions, budgets, assets }) {
   }, [transactions, nowYear, nowMonth]);
 
   // Projected spend — daily run rate extrapolated to month-end, one-offs excluded
-  const { version: tagVersion, getTag } = useTags();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { getTag } = useTags();
   const proj = useMemo(
     () => projectMonth(transactions, { year: nowYear, month: nowMonth, getTag }),
-    [transactions, nowYear, nowMonth, tagVersion]
+    [transactions, nowYear, nowMonth, getTag]
   );
   const projected   = proj.projected;
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
@@ -76,8 +75,12 @@ export default function Overview({ transactions, budgets, assets }) {
 
   // Recurring bills + left-to-spend (Simplifi-style spending plan)
   const [recurringVersion, setRecurringVersion] = useState(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const recurring = useMemo(() => detectRecurring(transactions), [transactions, recurringVersion]);
+  const recurring = useMemo(
+    () => detectRecurring(transactions),
+    // recurringVersion re-runs detection after a dismissal updates localStorage
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [transactions, recurringVersion]
+  );
   const upcomingBills = useMemo(() => upcomingRecurringTotal(recurring), [recurring]);
   const leftToSpend = income - spent - upcomingBills;
   const recurringMonthly = recurring.reduce((s, r) => s + r.avgAmount, 0);

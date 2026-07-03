@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useTheme } from "../theme/ThemeContext";
 import Card from "../components/Card";
 import PageHeader from "../components/PageHeader";
@@ -120,13 +120,15 @@ export default function Settings({
     return Array.from(seen).sort();
   }, [budgets, transactions]);
 
+  // Reset drafts when fresh sheet data arrives (adjust-state-during-render pattern)
   const [draft, setDraft] = useState({});
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
+  const [draftBase, setDraftBase] = useState(null);
+  if (draftBase !== budgets) {
+    setDraftBase(budgets);
     const next = {};
     categories.forEach(c => { next[c] = budgets[c] != null ? String(budgets[c]) : ""; });
     setDraft(next);
-  }, [categories, budgets]);
+  }
 
   const dirty = useMemo(
     () => categories.some(c => {
@@ -168,8 +170,11 @@ export default function Settings({
 
   // ── Goals editor ─────────────────────────────────────────────────────────
   const [goalDraft, setGoalDraft] = useState([]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setGoalDraft(goals.map(g => ({ ...g }))); }, [goals]);
+  const [goalBase, setGoalBase] = useState(null);
+  if (goalBase !== goals) {
+    setGoalBase(goals);
+    setGoalDraft(goals.map(g => ({ ...g })));
+  }
   const goalsDirty = JSON.stringify(goalDraft) !== JSON.stringify(goals);
   const [goalStatus, setGoalStatus] = useState(null);
 
@@ -189,8 +194,11 @@ export default function Settings({
 
   // ── Watchlists editor ────────────────────────────────────────────────────
   const [watchDraft, setWatchDraft] = useState([]);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setWatchDraft(watchlists.map(w => ({ ...w }))); }, [watchlists]);
+  const [watchBase, setWatchBase] = useState(null);
+  if (watchBase !== watchlists) {
+    setWatchBase(watchlists);
+    setWatchDraft(watchlists.map(w => ({ ...w })));
+  }
   const watchDirty = JSON.stringify(watchDraft) !== JSON.stringify(watchlists);
   const [watchStatus, setWatchStatus] = useState(null);
 

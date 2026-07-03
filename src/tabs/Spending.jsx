@@ -214,11 +214,11 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   const deferredQuery = useDeferredValue(query);
 
   // Current-month projection (daily run rate, one-offs not extrapolated)
-  const { version: tagVersion, getTag, options: tagOptions } = useTags();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const { getTag, options: tagOptions } = useTags();
+  const [curYear, curMonth] = currentYM.split("-").map(Number);
   const proj = useMemo(
-    () => projectMonth(transactions, { year: now.getFullYear(), month: now.getMonth() + 1, getTag }),
-    [transactions, currentYM, tagVersion]
+    () => projectMonth(transactions, { year: curYear, month: curMonth, getTag }),
+    [transactions, curYear, curMonth, getTag]
   );
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
 
@@ -295,8 +295,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchActive, deferredQuery, filterTag, filterCurrency, transactions, tagVersion]);
+  }, [searchActive, deferredQuery, filterTag, filterCurrency, transactions, getTag]);
 
   const searchTotal = useMemo(
     () => (searchResults || []).filter(isSpend).reduce((s, t) => s + t.amount, 0),

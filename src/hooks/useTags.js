@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useCallback } from "react";
 
 export const DEFAULT_TAG_OPTIONS = ["Business", "Holiday", "One-off", "Irregular"];
 
@@ -66,5 +66,11 @@ export function useTags() {
     },
     () => version
   );
-  return { version: v, getTag, setTag, options: getTagOptions() };
+  // Identity changes with the store version so memos depending on getTag
+  // recompute when any tag changes.
+  const getTagVersioned = useCallback((tx) => {
+    void v;
+    return getTag(tx);
+  }, [v]);
+  return { version: v, getTag: getTagVersioned, setTag, options: getTagOptions() };
 }

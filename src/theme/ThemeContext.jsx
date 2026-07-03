@@ -47,6 +47,7 @@ export function ThemeProvider({ children }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- the hook and provider belong together
 export function useTheme() {
   const ctx = useContext(ThemeContext);
   if (!ctx) throw new Error("useTheme must be used within ThemeProvider");
