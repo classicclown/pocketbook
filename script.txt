@@ -27,6 +27,16 @@ function checkEmails() {
         }
 
         if (transaction) {
+          transaction.vendor = normalizeVendor(transaction.vendor);
+          // Card payments arrive uncategorized; EFT/Income parsers set their
+          // own category — never override those.
+          if (!transaction.category) {
+            const match = categorizeVendor(transaction.vendor, loadMappings());
+            if (match) {
+              transaction.category    = match.category;
+              transaction.subcategory = match.subcategory;
+            }
+          }
           if (!isDuplicate(transaction)) {
             writeToSheet(transaction);
             Logger.log("Written: " + JSON.stringify(transaction));
@@ -104,6 +114,183 @@ function parseIncomingPayment(body, emailDate) {
   };
 }
 
+// ─── Vendor normalization & auto-categorization ──────────────────────────────
+
+// Strip payment-processor noise so the sheet stores a clean display name:
+// "YOCO *PAULINES COFFE CAP" → "PAULINES COFFE CAP".
+const PROCESSOR_PREFIXES = /^(yoco|sq|zapper|snapscan|payfast|ikhokha|paygate|karri|paypal|pos)\s*[*\-–:]?\s*/i;
+
+function normalizeVendor(raw) {
+  let v = String(raw || "").trim();
+  v = v.replace(PROCESSOR_PREFIXES, "");
+  v = v.replace(/^[*\-–:\s]+/, "");        // stray leading separators
+  v = v.replace(/\s{2,}/g, " ").trim();
+  return v || String(raw || "").trim();     // never normalize down to nothing
+}
+
+// Mapping tab: key | category | subcategory. Keys are matched as
+// case-insensitive substrings of the vendor, longest key first — so short
+// generic keys ("pharm", "coffee") work as keyword rules in the same table.
+function loadMappings() {
+  const sheet = openSpreadsheet().getSheetByName("Mapping");
+  if (!sheet) return [];
+  return sheet.getDataRange().getValues().slice(1)
+    .filter(r => r[0] && r[1])
+    .map(r => ({
+      key:         String(r[0]).toLowerCase().trim(),
+      category:    String(r[1]).trim(),
+      subcategory: r[2] ? String(r[2]).trim() : "",
+    }))
+    .sort((a, b) => b.key.length - a.key.length);
+}
+
+function categorizeVendor(vendor, mappings) {
+  const v = String(vendor || "").toLowerCase().replace(/\s{2,}/g, " ").trim();
+  if (!v) return null;
+  for (const m of mappings) {
+    if (v.indexOf(m.key) !== -1) return m;
+  }
+  return null;
+}
+
+// Fill category/subcategory for existing rows that have none. Writes plain
+// values (not formulas) into columns E/F; never touches rows that already
+// have a category. Returns the number of rows updated.
+function categorizeBacklog() {
+  const ss = openSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) return 0;
+  const mappings = loadMappings();
+  const data = sheet.getDataRange().getValues();
+  let updated = 0;
+  for (let i = 1; i < data.length; i++) {
+    const hasCategory = String(data[i][4] || "").trim();
+    if (hasCategory && hasCategory.toLowerCase() !== "uncategorised") continue;
+    const match = categorizeVendor(data[i][1], mappings);
+    if (match) {
+      sheet.getRange(i + 1, 5, 1, 2).setValues([[match.category, match.subcategory]]);
+      updated++;
+    }
+  }
+  Logger.log("categorizeBacklog updated " + updated + " rows");
+  return updated;
+}
+
+// OPTIONAL, run manually with care: re-normalizes vendor names on existing
+// rows. Caveat: the app keys localStorage tags and recurring-exclusions by
+// vendor name, so renaming historical vendors orphans those.
+function normalizeBacklog() {
+  const sheet = openSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) return;
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    const clean = normalizeVendor(data[i][1]);
+    if (clean !== data[i][1]) sheet.getRange(i + 1, 2).setValue(clean);
+  }
+}
+
+// Run once: seed the Mapping tab with common SA merchants and generic
+// keyword rules. Skips any key that already exists — never overwrites yours.
+function seedMapping() {
+  const ss = openSpreadsheet();
+  const sheet = getOrCreateSheet(ss, "Mapping", ["Key", "Category", "Subcategory"]);
+  const existing = new Set(
+    sheet.getDataRange().getValues().slice(1).map(r => String(r[0]).toLowerCase().trim())
+  );
+  const SEED = [
+    // Groceries
+    ["woolworths", "Groceries", "Food"], ["checkers", "Groceries", "Food"],
+    ["pick n pay", "Groceries", "Food"], ["pnp", "Groceries", "Food"],
+    ["spar", "Groceries", "Food"], ["shoprite", "Groceries", "Food"],
+    ["food lover", "Groceries", "Food"], ["ok foods", "Groceries", "Food"],
+    ["usave", "Groceries", "Food"], ["boxer", "Groceries", "Food"],
+    // Dining & coffee
+    ["uber eats", "Dining", "Delivery"], ["mr d", "Dining", "Delivery"],
+    ["kfc", "Dining", "Fast Food"], ["mcdonald", "Dining", "Fast Food"],
+    ["nando", "Dining", "Fast Food"], ["steers", "Dining", "Fast Food"],
+    ["wimpy", "Dining", "Fast Food"], ["burger king", "Dining", "Fast Food"],
+    ["debonairs", "Dining", "Fast Food"], ["romans pizza", "Dining", "Fast Food"],
+    ["fishaways", "Dining", "Fast Food"], ["chicken licken", "Dining", "Fast Food"],
+    ["vida e", "Dining", "Coffee"], ["seattle coffee", "Dining", "Coffee"],
+    ["starbucks", "Dining", "Coffee"], ["mugg & bean", "Dining", "Restaurant"],
+    ["mugg and bean", "Dining", "Restaurant"], ["spur", "Dining", "Restaurant"],
+    ["ocean basket", "Dining", "Restaurant"], ["rocomamas", "Dining", "Restaurant"],
+    ["tashas", "Dining", "Restaurant"], ["kauai", "Dining", "Restaurant"],
+    ["coffee", "Dining", "Coffee"], ["cafe", "Dining", "Restaurant"],
+    ["caffe", "Dining", "Coffee"], ["bakery", "Dining", "Bakery"],
+    ["restaurant", "Dining", "Restaurant"],
+    // Transport & fuel
+    ["uber", "Transport", "Rideshare"], ["bolt", "Transport", "Rideshare"],
+    ["shell", "Transport", "Fuel"], ["engen", "Transport", "Fuel"],
+    ["bp ", "Transport", "Fuel"], ["sasol", "Transport", "Fuel"],
+    ["caltex", "Transport", "Fuel"], ["total ", "Transport", "Fuel"],
+    ["astron", "Transport", "Fuel"], ["gautrain", "Transport", "Public Transport"],
+    ["myciti", "Transport", "Public Transport"], ["parking", "Transport", "Parking"],
+    ["sanral", "Transport", "Tolls"], ["kulula", "Transport", "Flights"],
+    ["flysafair", "Transport", "Flights"], ["safair", "Transport", "Flights"],
+    ["airlink", "Transport", "Flights"], ["lift.co", "Transport", "Flights"],
+    // Entertainment & subscriptions
+    ["netflix", "Entertainment", "Streaming"], ["spotify", "Entertainment", "Streaming"],
+    ["showmax", "Entertainment", "Streaming"], ["dstv", "Entertainment", "Streaming"],
+    ["multichoice", "Entertainment", "Streaming"], ["youtube", "Entertainment", "Streaming"],
+    ["disney", "Entertainment", "Streaming"], ["apple.com/bill", "Entertainment", "Subscriptions"],
+    ["steam", "Entertainment", "Gaming"], ["playstation", "Entertainment", "Gaming"],
+    ["xbox", "Entertainment", "Gaming"], ["ster-kinekor", "Entertainment", "Movies"],
+    ["nu metro", "Entertainment", "Movies"], ["computicket", "Entertainment", "Events"],
+    ["webtickets", "Entertainment", "Events"], ["quicket", "Entertainment", "Events"],
+    // Shopping & online
+    ["takealot", "Shopping", "Online"], ["amazon", "Shopping", "Online"],
+    ["superbalist", "Shopping", "Clothing"], ["mr price", "Shopping", "Clothing"],
+    ["mrp", "Shopping", "Clothing"], ["cotton on", "Shopping", "Clothing"],
+    ["h&m", "Shopping", "Clothing"], ["zara", "Shopping", "Clothing"],
+    ["pep ", "Shopping", "Clothing"], ["ackermans", "Shopping", "Clothing"],
+    ["truworths", "Shopping", "Clothing"], ["foschini", "Shopping", "Clothing"],
+    ["woolworths fashion", "Shopping", "Clothing"], ["sportsmans", "Shopping", "Sport"],
+    ["totalsports", "Shopping", "Sport"], ["cape union", "Shopping", "Outdoor"],
+    ["exclusive books", "Shopping", "Books"], ["cna", "Shopping", "Stationery"],
+    ["takkie town", "Shopping", "Shoes"], ["shein", "Shopping", "Clothing"],
+    ["temu", "Shopping", "Online"], ["incredible connection", "Shopping", "Electronics"],
+    ["istore", "Shopping", "Electronics"], ["game ", "Shopping", "General"],
+    ["makro", "Shopping", "General"], ["builders", "Home", "Maintenance"],
+    ["leroy merlin", "Home", "Maintenance"], ["mica", "Home", "Maintenance"],
+    ["chamberlain", "Home", "Maintenance"], ["@home", "Home", "Homeware"],
+    ["mr price home", "Home", "Homeware"], ["sheet street", "Home", "Homeware"],
+    // Health & beauty
+    ["clicks", "Health", "Pharmacy"], ["dis-chem", "Health", "Pharmacy"],
+    ["dischem", "Health", "Pharmacy"], ["pharm", "Health", "Pharmacy"],
+    ["discovery health", "Health", "Insurance"], ["discovery vitality", "Health", "Vitality"],
+    ["virgin active", "Health", "Gym"], ["planet fitness", "Health", "Gym"],
+    ["sorbet", "Health", "Beauty"], ["dentist", "Health", "Medical"],
+    ["dr ", "Health", "Medical"], ["pathcare", "Health", "Medical"],
+    ["lancet", "Health", "Medical"], ["netcare", "Health", "Medical"],
+    ["mediclinic", "Health", "Medical"],
+    // Utilities & connectivity
+    ["vodacom", "Utilities", "Mobile"], ["mtn", "Utilities", "Mobile"],
+    ["telkom", "Utilities", "Mobile"], ["cell c", "Utilities", "Mobile"],
+    ["rain", "Utilities", "Internet"], ["afrihost", "Utilities", "Internet"],
+    ["webafrica", "Utilities", "Internet"], ["axxess", "Utilities", "Internet"],
+    ["cool ideas", "Utilities", "Internet"], ["vumatel", "Utilities", "Internet"],
+    ["octotel", "Utilities", "Internet"], ["city of cape town", "Utilities", "Municipal"],
+    ["city of joburg", "Utilities", "Municipal"], ["eskom", "Utilities", "Electricity"],
+    ["prepaid electricity", "Utilities", "Electricity"],
+    // Fees & financial
+    ["bank charges", "Fees", "Bank"], ["monthly account fee", "Fees", "Bank"],
+    ["sars", "Fees", "Tax"], ["easyequities", "Investments", "Deposits"],
+    // Pets
+    ["absolute pets", "Pets", "Supplies"], ["petzone", "Pets", "Supplies"],
+    ["vet", "Pets", "Vet"],
+    // Alcohol
+    ["tops", "Groceries", "Alcohol"], ["norman goodfellows", "Groceries", "Alcohol"],
+    ["liquor", "Groceries", "Alcohol"], ["bottle store", "Groceries", "Alcohol"],
+  ];
+  const rows = SEED.filter(([key]) => !existing.has(key));
+  if (rows.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 3).setValues(rows);
+  }
+  Logger.log("seedMapping added " + rows.length + " mappings");
+  return rows.length;
+}
+
 // ─── Sheet helpers ────────────────────────────────────────────────────────────
 
 function isDuplicate(transaction) {
@@ -139,6 +326,7 @@ function writeToSheet(transaction) {
 
 // ─── Web app endpoint ─────────────────────────────────────────────────────────
 // GET  ?sheet=transactions|budgets|assets|settings|goals|watchlists|networth
+//              |mapping|fixed|investments
 //   → 2D array of the tab's values (header row first), [] if the tab is missing.
 // POST body = JSON string (send WITHOUT a Content-Type header so the browser
 //   uses text/plain and skips the CORS preflight Apps Script can't answer):
@@ -146,7 +334,9 @@ function writeToSheet(transaction) {
 //   { "action": "setBudgets",    "budgets": { "Groceries": 4000, ... } }
 //   { "action": "setGoals",      "goals": [{ name, target, saved, deadline, icon }, ...] }
 //   { "action": "setWatchlists", "watchlists": [{ name, type, match, monthlyLimit }, ...] }
-//   → { "ok": true } | { "ok": false, "error": "..." }
+//   { "action": "setFixed",      "fixed": [{ name, amount, category, subcategory, day, active }, ...] }
+//   { "action": "addMapping",    "key": "vendor substring", "category": "...", "subcategory": "..." }
+//   → { "ok": true } | { "ok": false, "error": "..." }  (addMapping also returns "updated": n)
 // NOTE: after editing this script you must Deploy → Manage deployments →
 // edit → New version. An uncaught throw here returns an HTML error page,
 // which the browser reports as a CORS failure.
@@ -159,6 +349,9 @@ const READ_TABS = {
   goals:        () => "Goals",
   watchlists:   () => "Watchlists",
   networth:     () => "NetWorthHistory",
+  mapping:      () => "Mapping",
+  fixed:        () => "Fixed",
+  investments:  () => "Investments",
 };
 
 function openSpreadsheet() {
@@ -212,6 +405,25 @@ function doPost(e) {
         rewriteRows(ss, "Watchlists", ["Name", "Type", "Match", "MonthlyLimit"],
           (payload.watchlists || []).map(w => [w.name, w.type, w.match, Number(w.monthlyLimit) || 0]));
         break;
+      case "setFixed":
+        rewriteRows(ss, "Fixed", ["Name", "Amount", "Category", "Subcategory", "Day", "Active"],
+          (payload.fixed || []).map(f => [
+            f.name, Number(f.amount) || 0, f.category || "", f.subcategory || "",
+            Number(f.day) || 1, f.active ? "TRUE" : "FALSE",
+          ]));
+        break;
+      case "addMapping": {
+        // Teach loop: save the mapping, then backfill every uncategorized
+        // row it matches so one tap in the app fixes past and future.
+        const sheet = getOrCreateSheet(ss, "Mapping", ["Key", "Category", "Subcategory"]);
+        const key = String(payload.key || "").toLowerCase().trim();
+        if (!key) return jsonResponse({ ok: false, error: "Empty mapping key" });
+        const exists = sheet.getDataRange().getValues().slice(1)
+          .some(r => String(r[0]).toLowerCase().trim() === key);
+        if (!exists) sheet.appendRow([key, payload.category || "", payload.subcategory || ""]);
+        const updated = categorizeBacklog();
+        return jsonResponse({ ok: true, updated });
+      }
       default:
         return jsonResponse({ ok: false, error: "Unknown action: " + payload.action });
     }
@@ -256,6 +468,14 @@ function snapshotNetWorth() {
     if (String(r[2]).toLowerCase() === "liability") liabilities += value;
     else if (r[0]) assets += value;
   });
+
+  // Investments count as assets (Value is column E of the Investments tab)
+  const inv = ss.getSheetByName("Investments");
+  if (inv) {
+    inv.getDataRange().getValues().slice(1).forEach(r => {
+      if (r[0] || r[1]) assets += Number(r[4]) || 0;
+    });
+  }
 
   const history = getOrCreateSheet(ss, "NetWorthHistory", ["Date", "Assets", "Liabilities", "Net"]);
   const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
