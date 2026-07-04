@@ -3,6 +3,7 @@ import {
   BarChart, Bar, Cell, XAxis, YAxis, ResponsiveContainer, Tooltip, ReferenceLine,
 } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import CustomTooltip from "../components/CustomTooltip";
 import Chip from "../components/Chip";
@@ -221,6 +222,7 @@ function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize }) {
 
 export default function Spending({ transactions, budgets, settings, watchlists = [], fixed = [], refetch, isMock }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
   const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -429,9 +431,17 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   };
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Spending" />
 
+      {/* Desktop: charts/envelopes left, transactions right */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)",
+        gap: isMobile ? 0 : 16,
+        alignItems: "start",
+      }}>
+      <div>
       {/* Top controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <Chip label="Chart" active={view === "chart"} onClick={() => setView("chart")} />
@@ -665,8 +675,10 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           })}
         </Card>
       )}
+      </div>
 
       {/* Transaction list */}
+      <div>
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>
@@ -759,6 +771,8 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           </div>
         )}
       </Card>
+      </div>
+      </div>
 
       {/* Uncategorised teach loop */}
       {categorize && (

@@ -114,7 +114,7 @@ export default function Analysis({ transactions }) {
   );
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Analysis" />
 
       {/* Trend chart */}

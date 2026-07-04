@@ -327,7 +327,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
   };
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <PageHeader eyebrow={monthLabel(currentYM)} title={`${greeting()}, Ryan`} />
         {!isMobile && (

@@ -138,7 +138,7 @@ export default function Planning({ transactions, assets, goals = [], netWorthHis
   }, [netWorth, avgSavings, netWorthHistory]);
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Planning" />
 
       {/* Savings Goals (from the Goals sheet tab, editable in Settings) */}
@@ -157,6 +157,14 @@ export default function Planning({ transactions, assets, goals = [], netWorthHis
         </div>
       )}
 
+      {/* Forecast + milestones side by side on desktop */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 3fr) minmax(0, 2fr)",
+        gap: isMobile ? 0 : 16,
+        alignItems: "start",
+      }}>
+      <div>
       {/* Net Worth Forecast */}
       <SectionHeader style={{ margin: "20px 0 12px" }}>Net Worth Forecast</SectionHeader>
       <Card>
@@ -190,8 +198,10 @@ export default function Planning({ transactions, assets, goals = [], netWorthHis
           </LineChart>
         </ResponsiveContainer>
       </Card>
+      </div>
 
       {/* Milestones */}
+      <div>
       <SectionHeader style={{ margin: "20px 0 12px" }}>Milestones</SectionHeader>
       <Card>
         {MILESTONES.map((m, i) => (
@@ -226,6 +236,8 @@ export default function Planning({ transactions, assets, goals = [], netWorthHis
           </div>
         ))}
       </Card>
+      </div>
+      </div>
     </div>
   );
 }

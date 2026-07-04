@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
@@ -107,6 +108,7 @@ export default function Settings({
   saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
 }) {
   const { T, preference, setPreference } = useTheme();
+  const isMobile = useIsMobile();
   useTags(); // re-render when tag options change
 
   // ── Budget allocations editor ────────────────────────────────────────────
@@ -284,9 +286,16 @@ export default function Settings({
   };
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div>
       <PageHeader title="Settings" />
 
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)",
+        gap: isMobile ? 0 : 16,
+        alignItems: "start",
+      }}>
+      <div>
       {/* Appearance */}
       <Card>
         <SectionHeader>Appearance</SectionHeader>
@@ -363,6 +372,9 @@ export default function Settings({
         </div>
       </Card>
 
+      </div>
+
+      <div>
       {/* Goals */}
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -655,6 +667,8 @@ export default function Settings({
           </button>
         </div>
       </Card>
+      </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useTheme } from "../theme/ThemeContext";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import Card from "../components/Card";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
@@ -7,6 +8,7 @@ import { fmt } from "../utils/compute";
 
 export default function Investments({ investments = [] }) {
   const { T } = useTheme();
+  const isMobile = useIsMobile();
 
   const holdings = useMemo(
     () => investments.slice().sort((a, b) => b.value - a.value),
@@ -15,7 +17,7 @@ export default function Investments({ investments = [] }) {
   const total = useMemo(() => holdings.reduce((s, h) => s + h.value, 0), [holdings]);
 
   return (
-    <div style={{ maxWidth: 800 }}>
+    <div>
       <PageHeader title="Investments" />
 
       {/* Total banner */}
@@ -45,9 +47,14 @@ export default function Investments({ investments = [] }) {
           </div>
         </Card>
       ) : (
-        <>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 2fr) minmax(0, 3fr)",
+          gap: isMobile ? 0 : 16,
+          alignItems: "start",
+        }}>
           {/* Allocation */}
-          <Card>
+          <Card style={{ marginBottom: isMobile ? 12 : 0 }}>
             <SectionHeader>Allocation</SectionHeader>
             <div style={{ display: "flex", height: 10, borderRadius: 5, overflow: "hidden", marginBottom: 14 }}>
               {holdings.map((h, i) => (
@@ -104,7 +111,7 @@ export default function Investments({ investments = [] }) {
               </div>
             ))}
           </Card>
-        </>
+        </div>
       )}
     </div>
   );
