@@ -56,7 +56,7 @@ export default function App() {
     loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, isMock,
   } = useSheetData();
 
-  const tabProps = { transactions, budgets, assets, settings, goals, watchlists, netWorthHistory };
+  const tabProps = { transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, refetch, isMock };
 
   const renderTab = () => {
     if (loading) return <LoadingState />;

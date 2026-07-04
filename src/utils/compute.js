@@ -43,6 +43,8 @@ export const MOCK_TRANSACTIONS = [
   { date:"2026-01-25", vendor:"Woolworths Food",       amount:398.60,  currency:"ZAR", card:"***1391", category:"Groceries",     subcategory:"Food" },
   { date:"2026-01-20", vendor:"Shell Garage",          amount:890.00,  currency:"ZAR", card:"***1391", category:"Transport",     subcategory:"Fuel" },
   { date:"2026-01-15", vendor:"Netflix",               amount:199.00,  currency:"ZAR", card:"***1391", category:"Entertainment", subcategory:"Streaming" },
+  { date:"2026-06-03", vendor:"Paulines Coffe Cap",    amount:86.00,   currency:"ZAR", card:"***1391", category:"Uncategorised", subcategory:"" },
+  { date:"2026-06-01", vendor:"The Corner Store PTY",  amount:245.50,  currency:"ZAR", card:"***1391", category:"Uncategorised", subcategory:"" },
 ];
 
 export const MOCK_BUDGETS = {

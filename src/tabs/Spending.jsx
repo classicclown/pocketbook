@@ -10,6 +10,7 @@ import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
 import EnvelopeCard from "../components/EnvelopeCard";
+import CategorizeSheet from "../components/CategorizeSheet";
 import DetailSheet from "../components/DetailSheet";
 import { CategoryDetail, MerchantDetail } from "../components/InsightDetails";
 import { useTags } from "../hooks/useTags";
@@ -19,7 +20,7 @@ import {
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
 
-function TransactionRow({ tx, onInspectVendor }) {
+function TransactionRow({ tx, onInspectVendor, onCategorize }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const { getTag, setTag, options: tagOptions } = useTags();
@@ -86,6 +87,18 @@ function TransactionRow({ tx, onInspectVendor }) {
             {tx.subcategory && <span>Subcategory: <strong style={{ color: T.text }}>{tx.subcategory}</strong></span>}
             {tx.card && <span>Card: <strong style={{ color: T.text }}>{tx.card}</strong></span>}
           </div>
+          {onCategorize && (!tx.category || tx.category === "Uncategorised") && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onCategorize(tx); }}
+              style={{
+                fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: T.radiusSm,
+                border: `1px dashed ${T.accent}`, background: "transparent",
+                color: T.accent, cursor: "pointer", fontFamily: T.font, marginBottom: 10,
+              }}
+            >
+              Categorise this vendor…
+            </button>
+          )}
           <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Tag</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {tagOptions.map(t2 => {
@@ -160,14 +173,16 @@ function GroupHeader({ label, total, count, depth, open, onClick, onLabelClick }
 }
 
 // Level 2: a sub-category. Expands to reveal the individual vendor transactions.
-function SubGroup({ sub, onInspectVendor }) {
+function SubGroup({ sub, onInspectVendor, onCategorize }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
       <GroupHeader label={sub.name} total={sub.total} count={sub.count} depth={1} open={open} onClick={() => setOpen(o => !o)} />
       {open && (
         <div style={{ paddingLeft: 16 }}>
-          {sub.items.map((tx, i) => <TransactionRow key={i} tx={tx} onInspectVendor={onInspectVendor} />)}
+          {sub.items.map((tx, i) => (
+            <TransactionRow key={i} tx={tx} onInspectVendor={onInspectVendor} onCategorize={onCategorize} />
+          ))}
         </div>
       )}
     </div>
@@ -176,7 +191,7 @@ function SubGroup({ sub, onInspectVendor }) {
 
 // Level 1: a category. Expands to reveal its sub-categories; the label itself
 // opens the category insight panel.
-function CategoryGroup({ cat, onInspect, onInspectVendor }) {
+function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -187,20 +202,23 @@ function CategoryGroup({ cat, onInspect, onInspectVendor }) {
       />
       {open && (
         <div style={{ paddingLeft: 16 }}>
-          {cat.subs.map(sub => <SubGroup key={sub.name} sub={sub} onInspectVendor={onInspectVendor} />)}
+          {cat.subs.map(sub => (
+            <SubGroup key={sub.name} sub={sub} onInspectVendor={onInspectVendor} onCategorize={onCategorize} />
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-export default function Spending({ transactions, budgets, settings, watchlists = [] }) {
+export default function Spending({ transactions, budgets, settings, watchlists = [], refetch, isMock }) {
   const { T } = useTheme();
   const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
   const [detail,       setDetail]       = useState(null);       // { type: "category"|"vendor", name }
+  const [categorize,   setCategorize]   = useState(null);       // false-y | { initialTx? }
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
 
@@ -281,6 +299,24 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     () => Array.from(new Set(transactions.map(t => t.currency))).sort(),
     [transactions]
   );
+
+  // Teach loop: uncategorised transactions + known categories for the picker
+  const uncategorised = useMemo(
+    () => transactions
+      .filter(t => !t.category || t.category === "Uncategorised")
+      .sort((a, b) => b.date.localeCompare(a.date)),
+    [transactions]
+  );
+
+  const knownCategories = useMemo(() => {
+    const seen = new Set(Object.keys(budgets));
+    transactions.forEach(t => {
+      if (t.category && t.category !== "Uncategorised" && t.category !== "Income" && t.category !== "Transfer") {
+        seen.add(t.category);
+      }
+    });
+    return Array.from(seen).sort();
+  }, [budgets, transactions]);
 
   const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency);
 
@@ -391,6 +427,24 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           <Chip label="Category" active={breakdown === "category"} onClick={() => setBreakdown("category")} />
           <Chip label="Vendor"   active={breakdown === "vendor"}   onClick={() => setBreakdown("vendor")} />
         </div>
+      )}
+
+      {/* Uncategorised review banner */}
+      {uncategorised.length > 0 && (
+        <button
+          onClick={() => setCategorize({})}
+          style={{
+            display: "flex", alignItems: "center", gap: 8, width: "100%",
+            background: T.accentBg, border: `1px dashed ${T.accent}`,
+            borderRadius: T.radius, padding: "10px 14px", marginBottom: 12,
+            cursor: "pointer", fontFamily: T.font, textAlign: "left",
+          }}
+        >
+          <span style={{ fontSize: 12, fontWeight: 600, color: T.accent }}>
+            {uncategorised.length} uncategorised transaction{uncategorised.length === 1 ? "" : "s"}
+          </span>
+          <span style={{ fontSize: 11, color: T.sub }}>— tap to review and teach the category engine</span>
+        </button>
       )}
 
       {/* Current-month projection summary */}
@@ -636,6 +690,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               cat={cat}
               onInspect={() => setDetail({ type: "category", name: cat.name })}
               onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
+              onCategorize={(tx) => setCategorize({ initialTx: tx })}
             />
           ))
         )}
@@ -645,6 +700,18 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           </div>
         )}
       </Card>
+
+      {/* Uncategorised teach loop */}
+      {categorize && (
+        <CategorizeSheet
+          transactions={uncategorised}
+          categories={knownCategories}
+          initialTx={categorize.initialTx}
+          isMock={isMock}
+          onSaved={() => { setCategorize(null); refetch(); }}
+          onClose={() => setCategorize(null)}
+        />
+      )}
 
       {/* Insight drill-down */}
       {detail && (
