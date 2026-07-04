@@ -40,7 +40,7 @@ const CARD_LABELS = {
   recurring:      "Recurring",
 };
 
-export default function Overview({ transactions, budgets, assets, fixed = [] }) {
+export default function Overview({ transactions, budgets, assets, fixed = [], investments = [] }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
   const chart = useChartDefaults();
@@ -60,7 +60,15 @@ export default function Overview({ transactions, budgets, assets, fixed = [] }) 
   const prevSpent   = useMemo(() => totalExpenses(prevTx), [prevTx]);
   const spentDelta  = prevSpent > 0 ? ((spent - prevSpent) / prevSpent) * 100 : 0;
 
-  const { totalAssets, totalLiabilities, netWorth } = useMemo(() => calcNetWorth(assets), [assets]);
+  const investmentsTotal = useMemo(() => investments.reduce((s, i) => s + i.value, 0), [investments]);
+  const { totalAssets, totalLiabilities, netWorth } = useMemo(() => {
+    const base = calcNetWorth(assets);
+    return {
+      totalAssets: base.totalAssets + investmentsTotal,
+      totalLiabilities: base.totalLiabilities,
+      netWorth: base.netWorth + investmentsTotal,
+    };
+  }, [assets, investmentsTotal]);
 
   // 6-month chart data
   const last6 = useMemo(() => {
@@ -359,6 +367,12 @@ export default function Overview({ transactions, budgets, assets, fixed = [] }) 
             <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Liabilities</span>
             <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalLiabilities)}</span>
           </div>
+          {investmentsTotal > 0 && (
+            <div>
+              <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Investments</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(investmentsTotal)}</span>
+            </div>
+          )}
         </div>
       </div>
 

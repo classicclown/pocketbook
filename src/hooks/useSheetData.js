@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   MOCK_TRANSACTIONS, MOCK_BUDGETS, MOCK_ASSETS,
-  MOCK_GOALS, MOCK_WATCHLISTS, MOCK_NETWORTH, MOCK_FIXED,
+  MOCK_GOALS, MOCK_WATCHLISTS, MOCK_NETWORTH, MOCK_FIXED, MOCK_INVESTMENTS,
 } from "../utils/compute";
 import { fetchSheet, postAction, useMock } from "../api/sheet";
 
@@ -93,6 +93,23 @@ const parseFixed = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row =
   active:      String(row[5]).toLowerCase() === "true",
 })).filter(f => f.name);
 
+// Investments tab: Ticker | Name | Units | Price | Value | Notes.
+// Price/Value cells may hold GOOGLEFINANCE formulas — Sheets returns the
+// computed numbers, so unlisted funds simply have a typed Value instead.
+const parseInvestments = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => {
+  const units = parseFloat(row[2]) || 0;
+  const price = parseFloat(row[3]) || 0;
+  const value = parseFloat(row[4]);
+  return {
+    ticker: row[0] ? String(row[0]) : "",
+    name:   row[1] || String(row[0] || ""),
+    units,
+    price,
+    value:  Number.isFinite(value) && value > 0 ? value : units * price,
+    notes:  row[5] || "",
+  };
+}).filter(i => i.name && i.value > 0);
+
 // NetWorthHistory tab: Date | Assets | Liabilities | Net
 const parseNetWorth = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
   date:        normalizeDate(row[0]),
@@ -109,6 +126,7 @@ export function useSheetData() {
   const [goals,        setGoals]        = useState([]);
   const [watchlists,   setWatchlists]   = useState([]);
   const [fixed,        setFixed]        = useState([]);
+  const [investments,  setInvestments]  = useState([]);
   const [netWorthHistory, setNetWorthHistory] = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
@@ -127,8 +145,9 @@ export function useSheetData() {
         setWatchlists(MOCK_WATCHLISTS);
         setNetWorthHistory(MOCK_NETWORTH);
         setFixed(MOCK_FIXED);
+        setInvestments(MOCK_INVESTMENTS);
       } else {
-        const [txRows, budgetRows, assetRows, settingRows, goalRows, watchlistRows, netWorthRows, fixedRows] = await Promise.all([
+        const [txRows, budgetRows, assetRows, settingRows, goalRows, watchlistRows, netWorthRows, fixedRows, investmentRows] = await Promise.all([
           fetchSheet("transactions"),
           fetchSheet("budgets"),
           fetchSheet("assets"),
@@ -137,6 +156,7 @@ export function useSheetData() {
           fetchSheet("watchlists"),
           fetchSheet("networth"),
           fetchSheet("fixed"),
+          fetchSheet("investments"),
         ]);
         setTransactions(parseTransactions(txRows));
         setBudgets(parseBudgets(budgetRows));
@@ -146,6 +166,7 @@ export function useSheetData() {
         setWatchlists(parseWatchlists(watchlistRows));
         setNetWorthHistory(parseNetWorth(netWorthRows));
         setFixed(parseFixed(fixedRows));
+        setInvestments(parseInvestments(investmentRows));
       }
     } catch (e) {
       setError(e.message || "Failed to load data");
@@ -227,7 +248,7 @@ export function useSheetData() {
   }, []);
 
   return {
-    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed, investments,
     loading, error, refetch: load,
     saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed,
     isMock: useMock,

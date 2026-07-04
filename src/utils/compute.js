@@ -84,6 +84,13 @@ export const MOCK_FIXED = [
   { name: "Old gym (paused)",  amount: 550,   category: "Health",    subcategory: "Gym",      day: 1,  active: false },
 ];
 
+export const MOCK_INVESTMENTS = [
+  { ticker: "STXWDM", name: "Satrix MSCI World", units: 420,  price: 92.15,  value: 38703,  notes: "" },
+  { ticker: "STX40",  name: "Satrix Top 40",     units: 310,  price: 78.40,  value: 24304,  notes: "" },
+  { ticker: "",       name: "Allan Gray RA",     units: 0,    price: 0,      value: 115000, notes: "manual value" },
+  { ticker: "BTC",    name: "Bitcoin",           units: 0.05, price: 1980000, value: 99000, notes: "" },
+];
+
 export const MOCK_NETWORTH = [
   { date: "2026-02-01", assets: 590000, liabilities: 472000, net: 118000 },
   { date: "2026-03-01", assets: 598000, liabilities: 468000, net: 130000 },

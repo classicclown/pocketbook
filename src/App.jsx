@@ -6,6 +6,7 @@ import Overview from "./tabs/Overview";
 import Spending from "./tabs/Spending";
 import Analysis from "./tabs/Analysis";
 import Planning from "./tabs/Planning";
+import Investments from "./tabs/Investments";
 import Settings from "./tabs/Settings";
 import { useSheetData } from "./hooks/useSheetData";
 
@@ -53,7 +54,7 @@ function ErrorState({ error, onRetry }) {
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const {
-    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed, investments,
     loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
   } = useSheetData();
 
@@ -62,7 +63,7 @@ export default function App() {
 
   const tabProps = {
     transactions: allTransactions,
-    budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
+    budgets, assets, settings, goals, watchlists, netWorthHistory, fixed, investments,
     refetch, isMock,
   };
 
@@ -74,6 +75,7 @@ export default function App() {
       case "spending":  return <Spending  {...tabProps} />;
       case "analysis":  return <Analysis  {...tabProps} />;
       case "planning":  return <Planning  {...tabProps} />;
+      case "invest":    return <Investments {...tabProps} />;
       case "settings":  return (
         <Settings
           {...tabProps}

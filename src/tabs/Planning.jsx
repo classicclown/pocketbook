@@ -88,11 +88,14 @@ function GoalCard({ goal, colorKey }) {
   );
 }
 
-export default function Planning({ transactions, assets, goals = [], netWorthHistory = [] }) {
+export default function Planning({ transactions, assets, goals = [], netWorthHistory = [], investments = [] }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
   const chart = useChartDefaults();
-  const { netWorth } = useMemo(() => calcNetWorth(assets), [assets]);
+  const netWorth = useMemo(
+    () => calcNetWorth(assets).netWorth + investments.reduce((s, i) => s + i.value, 0),
+    [assets, investments]
+  );
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
 

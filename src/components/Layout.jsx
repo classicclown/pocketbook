@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: "spending",  label: "Spending",  icon: "◫" },
   { id: "analysis",  label: "Analysis",  icon: "◉" },
   { id: "planning",  label: "Planning",  icon: "◎" },
+  { id: "invest",    label: "Invest",    icon: "◈" },
 ];
 
 const SETTINGS_ITEM = { id: "settings", label: "Settings", icon: "◍" };
