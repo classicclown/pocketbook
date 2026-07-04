@@ -103,8 +103,8 @@ function AddRowButton({ label, onClick }) {
 }
 
 export default function Settings({
-  transactions, budgets, settings, goals, watchlists,
-  saveSetting, saveBudgets, saveGoals, saveWatchlists, isMock,
+  transactions, budgets, settings, goals, watchlists, fixed,
+  saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
 }) {
   const { T, preference, setPreference } = useTheme();
   useTags(); // re-render when tag options change
@@ -218,6 +218,35 @@ export default function Settings({
       setTimeout(() => setWatchStatus(null), 2500);
     } catch (e) {
       setWatchStatus(e.message || "Save failed");
+    }
+  };
+
+  // ── Fixed expenses editor ────────────────────────────────────────────────
+  const [fixedDraft, setFixedDraft] = useState([]);
+  const [fixedBase, setFixedBase] = useState(null);
+  if (fixedBase !== fixed) {
+    setFixedBase(fixed);
+    setFixedDraft(fixed.map(f => ({ ...f })));
+  }
+  const fixedDirty = JSON.stringify(fixedDraft) !== JSON.stringify(fixed);
+  const [fixedStatus, setFixedStatus] = useState(null);
+
+  const handleSaveFixed = async () => {
+    const cleaned = fixedDraft
+      .filter(f => f.name.trim())
+      .map(f => ({
+        ...f,
+        name: f.name.trim(),
+        amount: parseFloat(f.amount) || 0,
+        day: Math.min(31, Math.max(1, parseInt(f.day, 10) || 1)),
+      }));
+    setFixedStatus("Saving…");
+    try {
+      await saveFixed(cleaned);
+      setFixedStatus("Saved");
+      setTimeout(() => setFixedStatus(null), 2500);
+    } catch (e) {
+      setFixedStatus(e.message || "Save failed");
     }
   };
 
@@ -375,6 +404,87 @@ export default function Settings({
           <AddRowButton
             label="Add goal"
             onClick={() => setGoalDraft(d => [...d, { name: "", target: "", saved: "", deadline: "", icon: "🎯" }])}
+          />
+        </div>
+      </Card>
+
+      {/* Fixed expenses */}
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <SectionHeader style={{ marginBottom: 0 }}>Fixed Expenses</SectionHeader>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SaveStatus status={fixedStatus} />
+            <SaveButton enabled={fixedDirty && !isMock} onClick={handleSaveFixed} />
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: T.sub, marginBottom: 10 }}>
+          Monthly costs from other accounts (rent, internet, …). Counted in every month's spending
+          automatically on their day of the month — no monthly entry needed.
+        </div>
+        {fixedDraft.map((f, i) => (
+          <div key={i} style={{
+            display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap",
+            padding: "8px 0", borderBottom: `1px solid ${T.border}`,
+            opacity: f.active ? 1 : 0.55,
+          }}>
+            <input
+              value={f.name}
+              placeholder="Name"
+              onChange={e => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, flex: 1, minWidth: 110, textAlign: "left", fontFamily: T.font }}
+            />
+            <input
+              type="number" min="0"
+              value={f.amount}
+              placeholder="Amount"
+              onChange={e => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 90 }}
+              title="Monthly amount"
+            />
+            <input
+              value={f.category}
+              placeholder="Category"
+              list="pb-categories"
+              onChange={e => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, category: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 110, textAlign: "left", fontFamily: T.font }}
+            />
+            <input
+              value={f.subcategory}
+              placeholder="Subcategory"
+              onChange={e => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, subcategory: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 100, textAlign: "left", fontFamily: T.font }}
+            />
+            <input
+              type="number" min="1" max="31"
+              value={f.day}
+              onChange={e => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, day: e.target.value } : x))}
+              disabled={isMock}
+              style={{ ...inputStyle, width: 56 }}
+              title="Day of month"
+            />
+            <Toggle
+              checked={f.active}
+              onChange={(on) => setFixedDraft(d => d.map((x, j) => j === i ? { ...x, active: on } : x))}
+              disabled={isMock}
+            />
+            <button
+              onClick={() => setFixedDraft(d => d.filter((_, j) => j !== i))}
+              disabled={isMock}
+              title="Remove fixed expense"
+              style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 13, padding: 2 }}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <div style={{ marginTop: 10 }}>
+          <AddRowButton
+            label="Add fixed expense"
+            onClick={() => setFixedDraft(d => [...d, { name: "", amount: "", category: "", subcategory: "", day: 1, active: true }])}
           />
         </div>
       </Card>

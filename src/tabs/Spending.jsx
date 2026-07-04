@@ -61,6 +61,14 @@ function TransactionRow({ tx, onInspectVendor, onCategorize }) {
             </div>
             <div style={{ fontSize: 11, color: T.sub }}>
               {tx.date} · {tx.category}
+              {tx.fixed && (
+                <span style={{
+                  marginLeft: 6,
+                  fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                  background: T.dim, color: T.sub, border: `1px solid ${T.border2}`,
+                  padding: "0px 5px", borderRadius: 2,
+                }}>Fixed</span>
+              )}
               {tag && (
                 <span style={{
                   marginLeft: 6,
@@ -211,7 +219,7 @@ function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize }) {
   );
 }
 
-export default function Spending({ transactions, budgets, settings, watchlists = [], refetch, isMock }) {
+export default function Spending({ transactions, budgets, settings, watchlists = [], fixed = [], refetch, isMock }) {
   const { T } = useTheme();
   const chart = useChartDefaults();
   const [view,         setView]         = useState("chart");    // "chart" | "table"
@@ -235,8 +243,8 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   const { getTag, options: tagOptions } = useTags();
   const [curYear, curMonth] = currentYM.split("-").map(Number);
   const proj = useMemo(
-    () => projectMonth(transactions, { year: curYear, month: curMonth, getTag }),
-    [transactions, curYear, curMonth, getTag]
+    () => projectMonth(transactions, { year: curYear, month: curMonth, getTag, fixed }),
+    [transactions, curYear, curMonth, getTag, fixed]
   );
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
 

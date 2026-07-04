@@ -77,6 +77,13 @@ export const MOCK_WATCHLISTS = [
   { name: "Coffee",        type: "vendor",   match: "Vida e Caffè", monthlyLimit: 300 },
 ];
 
+export const MOCK_FIXED = [
+  { name: "Rent",              amount: 12000, category: "Housing",   subcategory: "Rent",     day: 1,  active: true },
+  { name: "Fibre internet",    amount: 899,   category: "Utilities", subcategory: "Internet", day: 1,  active: true },
+  { name: "Car insurance",     amount: 1450,  category: "Transport", subcategory: "Insurance", day: 25, active: true },
+  { name: "Old gym (paused)",  amount: 550,   category: "Health",    subcategory: "Gym",      day: 1,  active: false },
+];
+
 export const MOCK_NETWORTH = [
   { date: "2026-02-01", assets: 590000, liabilities: 472000, net: 118000 },
   { date: "2026-03-01", assets: 598000, liabilities: 468000, net: 130000 },

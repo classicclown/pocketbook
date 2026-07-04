@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   MOCK_TRANSACTIONS, MOCK_BUDGETS, MOCK_ASSETS,
-  MOCK_GOALS, MOCK_WATCHLISTS, MOCK_NETWORTH,
+  MOCK_GOALS, MOCK_WATCHLISTS, MOCK_NETWORTH, MOCK_FIXED,
 } from "../utils/compute";
 import { fetchSheet, postAction, useMock } from "../api/sheet";
 
@@ -83,6 +83,16 @@ const parseWatchlists = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(
   monthlyLimit: parseFloat(row[3]) || 0,
 })).filter(w => w.name && w.match);
 
+// Fixed tab: Name | Amount | Category | Subcategory | Day | Active
+const parseFixed = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
+  name:        row[0] || "",
+  amount:      parseFloat(row[1]) || 0,
+  category:    row[2] || "",
+  subcategory: row[3] || "",
+  day:         parseInt(row[4], 10) || 1,
+  active:      String(row[5]).toLowerCase() === "true",
+})).filter(f => f.name);
+
 // NetWorthHistory tab: Date | Assets | Liabilities | Net
 const parseNetWorth = (rows) => !Array.isArray(rows) ? [] : rows.slice(1).map(row => ({
   date:        normalizeDate(row[0]),
@@ -98,6 +108,7 @@ export function useSheetData() {
   const [settings,     setSettings]     = useState(DEFAULT_SETTINGS);
   const [goals,        setGoals]        = useState([]);
   const [watchlists,   setWatchlists]   = useState([]);
+  const [fixed,        setFixed]        = useState([]);
   const [netWorthHistory, setNetWorthHistory] = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [error,        setError]        = useState(null);
@@ -115,8 +126,9 @@ export function useSheetData() {
         setGoals(MOCK_GOALS);
         setWatchlists(MOCK_WATCHLISTS);
         setNetWorthHistory(MOCK_NETWORTH);
+        setFixed(MOCK_FIXED);
       } else {
-        const [txRows, budgetRows, assetRows, settingRows, goalRows, watchlistRows, netWorthRows] = await Promise.all([
+        const [txRows, budgetRows, assetRows, settingRows, goalRows, watchlistRows, netWorthRows, fixedRows] = await Promise.all([
           fetchSheet("transactions"),
           fetchSheet("budgets"),
           fetchSheet("assets"),
@@ -124,6 +136,7 @@ export function useSheetData() {
           fetchSheet("goals"),
           fetchSheet("watchlists"),
           fetchSheet("networth"),
+          fetchSheet("fixed"),
         ]);
         setTransactions(parseTransactions(txRows));
         setBudgets(parseBudgets(budgetRows));
@@ -132,6 +145,7 @@ export function useSheetData() {
         setGoals(parseGoals(goalRows));
         setWatchlists(parseWatchlists(watchlistRows));
         setNetWorthHistory(parseNetWorth(netWorthRows));
+        setFixed(parseFixed(fixedRows));
       }
     } catch (e) {
       setError(e.message || "Failed to load data");
@@ -200,10 +214,22 @@ export function useSheetData() {
     }
   }, []);
 
+  const saveFixed = useCallback(async (next) => {
+    if (useMock) throw new Error("Not available in mock mode");
+    let previous;
+    setFixed(f => { previous = f; return next; });
+    try {
+      await postAction({ action: "setFixed", fixed: next });
+    } catch (e) {
+      setFixed(previous);
+      throw e;
+    }
+  }, []);
+
   return {
-    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
     loading, error, refetch: load,
-    saveSetting, saveBudgets, saveGoals, saveWatchlists,
+    saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed,
     isMock: useMock,
   };
 }

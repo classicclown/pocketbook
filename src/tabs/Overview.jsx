@@ -40,7 +40,7 @@ const CARD_LABELS = {
   recurring:      "Recurring",
 };
 
-export default function Overview({ transactions, budgets, assets }) {
+export default function Overview({ transactions, budgets, assets, fixed = [] }) {
   const { T } = useTheme();
   const isMobile = useIsMobile();
   const chart = useChartDefaults();
@@ -79,8 +79,8 @@ export default function Overview({ transactions, budgets, assets }) {
   // Projected spend — daily run rate extrapolated to month-end, one-offs excluded
   const { getTag } = useTags();
   const proj = useMemo(
-    () => projectMonth(transactions, { year: nowYear, month: nowMonth, getTag }),
-    [transactions, nowYear, nowMonth, getTag]
+    () => projectMonth(transactions, { year: nowYear, month: nowMonth, getTag, fixed }),
+    [transactions, nowYear, nowMonth, getTag, fixed]
   );
   const projected   = proj.projected;
   const totalBudget = Object.values(budgets).reduce((s, v) => s + v, 0);
@@ -98,7 +98,7 @@ export default function Overview({ transactions, budgets, assets }) {
     [transactions, recurringVersion]
   );
   const upcomingBills = useMemo(() => upcomingRecurringTotal(recurring), [recurring]);
-  const leftToSpend = income - spent - upcomingBills;
+  const leftToSpend = income - spent - upcomingBills - proj.upcomingFixedTotal;
   const recurringMonthly = recurring.reduce((s, r) => s + r.avgAmount, 0);
 
   const dismissRecurring = (vendor) => {
@@ -132,6 +132,7 @@ export default function Overview({ transactions, budgets, assets }) {
           <div style={{ fontSize: 11, color: T.sub, textAlign: "right" }}>
             {fmt(income)} income − {fmt(spent)} spent
             {upcomingBills > 0 && <> − {fmt(upcomingBills)} upcoming bills</>}
+            {proj.upcomingFixedTotal > 0 && <> − {fmt(proj.upcomingFixedTotal)} upcoming fixed</>}
           </div>
         </div>
         {income === 0 && (

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import { mergeFixed } from "./utils/fixed";
 import { useTheme } from "./theme/ThemeContext";
 import Layout from "./components/Layout";
 import Overview from "./tabs/Overview";
@@ -52,11 +53,18 @@ function ErrorState({ error, onRetry }) {
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const {
-    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory,
-    loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, isMock,
+    transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
+    loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
   } = useSheetData();
 
-  const tabProps = { transactions, budgets, assets, settings, goals, watchlists, netWorthHistory, refetch, isMock };
+  // Fixed expenses are synthesized into the card transaction stream once here
+  const allTransactions = useMemo(() => mergeFixed(transactions, fixed), [transactions, fixed]);
+
+  const tabProps = {
+    transactions: allTransactions,
+    budgets, assets, settings, goals, watchlists, netWorthHistory, fixed,
+    refetch, isMock,
+  };
 
   const renderTab = () => {
     if (loading) return <LoadingState />;
@@ -73,6 +81,7 @@ export default function App() {
           saveBudgets={saveBudgets}
           saveGoals={saveGoals}
           saveWatchlists={saveWatchlists}
+          saveFixed={saveFixed}
           isMock={isMock}
         />
       );

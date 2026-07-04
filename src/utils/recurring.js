@@ -37,7 +37,7 @@ export function detectRecurring(transactions, {
   const { exclude } = getRecurringOverrides();
   const groups = {};
   transactions.forEach(t => {
-    if (!isSpend(t)) return;
+    if (!isSpend(t) || t.fixed) return; // fixed expenses are already known bills
     (groups[t.vendor] ||= []).push(t);
   });
 
