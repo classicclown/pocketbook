@@ -377,6 +377,30 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     return { cards, unallocated };
   }, [envelopeMode, envelopeYM, currentYM, transactions, budgets, proj]);
 
+  // Stacked monthly chart: per-month totals for the top 6 categories + Other
+  const stackedInfo = useMemo(() => {
+    if (!settings?.stackedChart) return null;
+    const catTotals = {};
+    transactions.forEach(t => {
+      if (isSpend(t)) catTotals[t.category] = (catTotals[t.category] || 0) + t.amount;
+    });
+    const top = Object.entries(catTotals).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c]) => c);
+    const topSet = new Set(top);
+    const data = months.slice().reverse().map(ym => {
+      const [y, m] = ym.split("-").map(Number);
+      const row = { ym, label: MONTH_LABELS[m - 1] };
+      let other = 0;
+      filterByMonth(transactions, y, m).forEach(t => {
+        if (!isSpend(t)) return;
+        if (topSet.has(t.category)) row[t.category] = (row[t.category] || 0) + t.amount;
+        else other += t.amount;
+      });
+      if (other > 0) row.Other = other;
+      return row;
+    });
+    return { keys: [...top, "Other"], data };
+  }, [settings?.stackedChart, months, transactions]);
+
   // Watchlists: month-to-date spend for watched vendors/categories
   const watchCards = useMemo(() => {
     if (!watchlists.length) return [];
@@ -476,6 +500,32 @@ export default function Spending({ transactions, budgets, settings, watchlists =
       {/* Chart or Table */}
       {view === "chart" ? (
         <Card>
+          {!selectedMonth && stackedInfo ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={stackedInfo.data} barSize={28} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
+                <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+                <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+                <Tooltip content={<CustomTooltip />} />
+                {proj.spent > 0 && (
+                  <ReferenceLine y={proj.projected} stroke={T.yellow} strokeDasharray="4 2" />
+                )}
+                {stackedInfo.keys.map((k, i) => (
+                  <Bar
+                    key={k}
+                    dataKey={k}
+                    name={k}
+                    stackId="month"
+                    fill={k === "Other" ? T.chartMuted : chart.series[i % chart.series.length]}
+                    onClick={(d) => {
+                      const ym = d?.ym ?? d?.payload?.ym;
+                      if (ym) setSelectedMonth(ym);
+                    }}
+                    style={{ cursor: "pointer" }}
+                  />
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
           <ResponsiveContainer width="100%" height={180}>
             <BarChart
               data={selectedMonth ? drillData : monthlyData}
@@ -517,6 +567,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          )}
         </Card>
       ) : (
         <Card style={{ padding: 0 }}>

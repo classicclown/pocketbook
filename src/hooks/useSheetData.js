@@ -57,11 +57,12 @@ const parseSettings = (rows) => {
   });
   return {
     envelopeMode: (raw.envelopeMode || "").toLowerCase() === "true",
+    stackedChart: (raw.stackedChart || "").toLowerCase() === "true",
     raw,
   };
 };
 
-const DEFAULT_SETTINGS = { envelopeMode: false, raw: {} };
+const DEFAULT_SETTINGS = { envelopeMode: false, stackedChart: false, raw: {} };
 
 // Goals tab: Name | Target | Saved | Deadline | Icon. Deadline stays a display
 // string ("Mar 2027"); Sheets may hand back a Date cell, so normalize those.
@@ -189,6 +190,7 @@ export function useSheetData() {
         ...s,
         raw,
         envelopeMode: (raw.envelopeMode || "").toLowerCase() === "true",
+        stackedChart: (raw.stackedChart || "").toLowerCase() === "true",
       };
     });
     try {

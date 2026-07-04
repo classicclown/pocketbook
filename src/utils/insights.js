@@ -58,6 +58,24 @@ export function merchantStats(transactions, vendor, endYM) {
   };
 }
 
+// Per-category spend for a set of months, for side-by-side comparison.
+// Returns rows sorted by largest single-month value.
+export function compareMonths(transactions, yms) {
+  const totals = {};
+  transactions.forEach(t => {
+    const ym = ymOf(t);
+    if (!yms.includes(ym) || !isSpend(t)) return;
+    const cat = t.category || "Uncategorised";
+    (totals[cat] ||= {})[ym] = ((totals[cat] || {})[ym] || 0) + t.amount;
+  });
+  return Object.entries(totals)
+    .map(([category, byMonth]) => ({
+      category,
+      values: yms.map(ym => byMonth[ym] || 0),
+    }))
+    .sort((a, b) => Math.max(...b.values) - Math.max(...a.values));
+}
+
 // Categories and vendors ranked by absolute month-over-month spend change.
 export function topMovers(transactions, ym, limit = 5) {
   const prevYM = shiftYM(ym, -1);

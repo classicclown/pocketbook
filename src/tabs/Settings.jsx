@@ -168,6 +168,18 @@ export default function Settings({
     }
   };
 
+  const [stackedStatus, setStackedStatus] = useState(null);
+  const handleStackedToggle = async (on) => {
+    setStackedStatus("Saving…");
+    try {
+      await saveSetting("stackedChart", on);
+      setStackedStatus("Saved");
+      setTimeout(() => setStackedStatus(null), 2500);
+    } catch (e) {
+      setStackedStatus(e.message || "Save failed");
+    }
+  };
+
   // ── Goals editor ─────────────────────────────────────────────────────────
   const [goalDraft, setGoalDraft] = useState([]);
   const [goalBase, setGoalBase] = useState(null);
@@ -284,6 +296,21 @@ export default function Settings({
         </div>
         <div style={{ fontSize: 11, color: T.sub, marginTop: 8 }}>
           System follows your device's light/dark preference.
+        </div>
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          borderTop: `1px solid ${T.border}`, marginTop: 12, paddingTop: 12,
+        }}>
+          <div>
+            <div style={{ fontSize: 13, color: T.text }}>Stacked spending chart</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
+              Break the monthly bars on the Spending page into category segments.
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <SaveStatus status={stackedStatus} />
+            <Toggle checked={settings.stackedChart} onChange={handleStackedToggle} disabled={isMock} />
+          </div>
         </div>
       </Card>
 

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid,
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend,
 } from "recharts";
 import { useTheme } from "../theme/ThemeContext";
 import { useIsMobile } from "../hooks/useMediaQuery";
@@ -11,10 +11,10 @@ import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
 import { useChartDefaults } from "../theme/chart";
 import {
-  getMonths, filterByMonth, totalExpenses, sumByCategory,
+  getMonths, filterByMonth, totalExpenses,
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
-import { topMovers } from "../utils/insights";
+import { topMovers, compareMonths } from "../utils/insights";
 
 function MoverList({ title, items }) {
   const { T } = useTheme();
@@ -83,16 +83,35 @@ export default function Analysis({ transactions }) {
   const prevYear  = nowMonth === 1 ? nowYear - 1 : nowYear;
   const prevYM    = `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
 
-  const curTx  = useMemo(() => filterByMonth(transactions, nowYear, nowMonth), [transactions, nowYear, nowMonth]);
-  const prevTx = useMemo(() => filterByMonth(transactions, prevYear, prevMonth), [transactions, prevYear, prevMonth]);
-  const curCats  = useMemo(() => sumByCategory(curTx.filter(t => t.category !== "Income")),  [curTx]);
-  const prevCats = useMemo(() => sumByCategory(prevTx.filter(t => t.category !== "Income")), [prevTx]);
-
-  const allCats = Array.from(new Set([...Object.keys(curCats), ...Object.keys(prevCats)])).sort();
-
-  const DOT_COLORS = T.chartSeries;
-
   const movers = useMemo(() => topMovers(transactions, curYM), [transactions, curYM]);
+
+  // Month comparison: pick 2–4 months to stack categories side by side
+  const [compareYMs, setCompareYMs] = useState(null);
+  const availableYMs = useMemo(() => getMonths(transactions).slice(0, 8).reverse(), [transactions]); // oldest→newest, last 8
+  const selectedYMs = useMemo(() => {
+    const chosen = compareYMs ?? [prevYM, curYM];
+    return chosen.filter(ym => availableYMs.includes(ym)).sort();
+  }, [compareYMs, prevYM, curYM, availableYMs]);
+
+  const toggleCompareYM = (ym) => {
+    setCompareYMs(() => {
+      const cur = selectedYMs;
+      if (cur.includes(ym)) {
+        return cur.length > 1 ? cur.filter(x => x !== ym) : cur;
+      }
+      const next = [...cur, ym].sort();
+      return next.length > 4 ? next.slice(next.length - 4) : next;
+    });
+  };
+
+  const comparison = useMemo(() => compareMonths(transactions, selectedYMs), [transactions, selectedYMs]);
+  const comparisonChartData = useMemo(
+    () => comparison.map(row => ({
+      category: row.category,
+      ...Object.fromEntries(selectedYMs.map((ym, i) => [ym, row.values[i]])),
+    })),
+    [comparison, selectedYMs]
+  );
 
   return (
     <div style={{ maxWidth: 960 }}>
@@ -154,49 +173,88 @@ export default function Analysis({ transactions }) {
         ))}
       </Card>
 
-      {/* Category comparison */}
-      <Card style={{ marginBottom: 0 }}>
-        <SectionHeader right={`${monthLabel(prevYM)} vs ${monthLabel(curYM)}`} style={{ marginBottom: 16 }}>
-          Category Trends
-        </SectionHeader>
-        {allCats.map((cat, i) => {
-          const cur  = curCats[cat]  || 0;
-          const prev = prevCats[cat] || 0;
-          const change = prev > 0 ? ((cur - prev) / prev) * 100 : null;
-          const up = change !== null && change > 0;
-          return (
-            <div key={cat} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "8px 0", borderBottom: `1px solid ${T.border}`,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: "50%", background: DOT_COLORS[i % DOT_COLORS.length] }} />
-                <span style={{ fontSize: 13, color: T.text }}>{cat}</span>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <span style={{ fontSize: 12, fontFamily: T.mono, color: T.sub }}>{fmt(prev)}</span>
-                <span style={{ fontSize: 11, color: T.sub, margin: "0 4px" }}>→</span>
-                <span style={{ fontSize: 12, fontFamily: T.mono, color: T.text }}>{fmt(cur)}</span>
-                {change !== null && (
-                  <span style={{ fontSize: 11, color: up ? T.red : T.green, marginLeft: 6 }}>
-                    {up ? "+" : ""}{change.toFixed(0)}%
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </Card>
-      </div>
-
       {/* Top movers vs last month */}
-      <Card style={{ marginTop: 12, marginBottom: 0 }}>
+      <Card style={{ marginBottom: 0 }}>
         <SectionHeader right={`${monthLabel(prevYM)} → ${monthLabel(curYM)}`} style={{ marginBottom: 14 }}>
           Top Movers
         </SectionHeader>
         <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
           <MoverList title="Categories" items={movers.categories} />
           <MoverList title="Vendors" items={movers.vendors} />
+        </div>
+      </Card>
+      </div>
+
+      {/* Month-by-month category comparison */}
+      <Card style={{ marginTop: 12, marginBottom: 0 }}>
+        <SectionHeader style={{ marginBottom: 12 }}>Compare Months</SectionHeader>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+          {availableYMs.map(ym => (
+            <Chip
+              key={ym}
+              label={monthLabel(ym)}
+              active={selectedYMs.includes(ym)}
+              onClick={() => toggleCompareYM(ym)}
+            />
+          ))}
+        </div>
+
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={comparisonChartData} barSize={selectedYMs.length > 2 ? 9 : 14} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
+            <XAxis
+              dataKey="category"
+              tick={{ ...chart.tick, fontSize: 9 }}
+              interval={0}
+              axisLine={chart.axisLine} tickLine={chart.tickLine}
+            />
+            <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+            {selectedYMs.map((ym, i) => (
+              <Bar
+                key={ym}
+                dataKey={ym}
+                name={monthLabel(ym)}
+                fill={chart.series[i % chart.series.length]}
+                radius={[2, 2, 0, 0]}
+              />
+            ))}
+          </BarChart>
+        </ResponsiveContainer>
+
+        {/* Value table with first→last delta */}
+        <div style={{ marginTop: 12 }}>
+          {comparison.map(row => {
+            const first = row.values[0];
+            const last = row.values[row.values.length - 1];
+            const change = first > 0 ? ((last - first) / first) * 100 : null;
+            const up = change !== null && change > 0;
+            return (
+              <div key={row.category} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "8px 0", borderBottom: `1px solid ${T.border}`, gap: 12,
+              }}>
+                <span style={{ fontSize: 13, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {row.category}
+                </span>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  {row.values.map((v, i) => (
+                    <span key={selectedYMs[i]}>
+                      {i > 0 && <span style={{ fontSize: 11, color: T.sub, margin: "0 4px" }}>→</span>}
+                      <span style={{ fontSize: 12, fontFamily: T.mono, color: i === row.values.length - 1 ? T.text : T.sub }}>
+                        {fmt(v)}
+                      </span>
+                    </span>
+                  ))}
+                  {change !== null && selectedYMs.length > 1 && (
+                    <span style={{ fontSize: 11, color: up ? T.red : T.green, marginLeft: 6 }}>
+                      {up ? "+" : ""}{change.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
     </div>
