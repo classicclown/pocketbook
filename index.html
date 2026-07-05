@@ -13,10 +13,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet" />
-    <script type="module" crossorigin src="/pocketbook/assets/index-IBtuLoMt.js"></script>
+    <script>
+      // Pre-paint dark background to avoid a light flash; ThemeProvider takes
+      // over (and keeps the theme-color meta in sync) once React mounts.
+      try {
+        var pref = localStorage.getItem("pb:themePref");
+        var dark = pref === "dark" || (pref !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        var bg = dark ? "#161310" : "#FAF9F7";
+        document.documentElement.style.background = bg;
+        document.querySelector('meta[name="theme-color"]').setAttribute("content", bg);
+      } catch (e) { /* default light stays */ }
+    </script>
+    <script type="module" crossorigin src="/pocketbook/assets/index-Y7AwuISa.js"></script>
     <link rel="stylesheet" crossorigin href="/pocketbook/assets/index-x1XGuNl0.css">
   <link rel="manifest" href="/pocketbook/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/pocketbook/registerSW.js"></script></head>
-  <body style="margin:0;padding:0;background:#FAF9F7;">
+  <body style="margin:0;padding:0;background:inherit;">
     <div id="root"></div>
   </body>
 </html>
