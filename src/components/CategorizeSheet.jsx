@@ -15,7 +15,7 @@ function suggestKey(vendor) {
     .trim();
 }
 
-function TeachForm({ tx, categories, onSaved }) {
+function TeachForm({ tx, categories, subcategoriesByCategory = {}, onSaved }) {
   const { T } = useTheme();
   const [key, setKey] = useState(() => suggestKey(tx.vendor));
   const [category, setCategory] = useState("");
@@ -64,11 +64,18 @@ function TeachForm({ tx, categories, onSaved }) {
           value={subcategory}
           onChange={e => setSubcategory(e.target.value)}
           placeholder="Subcategory (optional)"
+          list="pb-teach-subcategories"
           style={inputStyle}
         />
       </div>
       <datalist id="pb-teach-categories">
         {categories.map(c => <option key={c} value={c} />)}
+      </datalist>
+      {/* Subcategory suggestions narrow to the chosen category's known values */}
+      <datalist id="pb-teach-subcategories">
+        {(subcategoriesByCategory[category.trim()] ??
+          Array.from(new Set(Object.values(subcategoriesByCategory).flat())).sort()
+        ).map(s => <option key={s} value={s} />)}
       </datalist>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <button
@@ -94,7 +101,7 @@ function TeachForm({ tx, categories, onSaved }) {
 
 // Review flow for uncategorised transactions: pick one, teach the engine a
 // mapping; the backend backfills every matching row, then we refetch.
-export default function CategorizeSheet({ transactions, categories, initialTx, onSaved, onClose, isMock }) {
+export default function CategorizeSheet({ transactions, categories, subcategoriesByCategory, initialTx, onSaved, onClose, isMock }) {
   const { T } = useTheme();
   const [selected, setSelected] = useState(initialTx ?? null);
 
@@ -133,7 +140,7 @@ export default function CategorizeSheet({ transactions, categories, initialTx, o
             </div>
           </div>
           {isSelected(tx) && !isMock && (
-            <TeachForm tx={tx} categories={categories} onSaved={onSaved} />
+            <TeachForm tx={tx} categories={categories} subcategoriesByCategory={subcategoriesByCategory} onSaved={onSaved} />
           )}
         </div>
       ))}

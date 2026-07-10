@@ -328,6 +328,16 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     return Array.from(seen).sort();
   }, [budgets, transactions]);
 
+  const subcategoriesByCategory = useMemo(() => {
+    const map = {};
+    transactions.forEach(t => {
+      if (t.category && t.subcategory && t.category !== "Uncategorised") {
+        (map[t.category] ??= new Set()).add(t.subcategory);
+      }
+    });
+    return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, Array.from(v).sort()]));
+  }, [transactions]);
+
   const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency);
 
   const searchResults = useMemo(() => {
@@ -434,14 +444,6 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     <div>
       <PageHeader title="Spending" />
 
-      {/* Desktop: charts/envelopes left, transactions right */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)",
-        gap: isMobile ? 0 : 16,
-        alignItems: "start",
-      }}>
-      <div>
       {/* Top controls */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         <Chip label="Chart" active={view === "chart"} onClick={() => setView("chart")} />
@@ -511,7 +513,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
       {view === "chart" ? (
         <Card>
           {!selectedMonth && stackedInfo ? (
-            <ResponsiveContainer width="100%" height={180}>
+            <ResponsiveContainer width="100%" height={isMobile ? 180 : 300}>
               <BarChart data={stackedInfo.data} barSize={28} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
                 <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
                 <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
@@ -536,7 +538,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               </BarChart>
             </ResponsiveContainer>
           ) : (
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={isMobile ? 180 : 300}>
             <BarChart
               data={selectedMonth ? drillData : monthlyData}
               barSize={28}
@@ -608,6 +610,14 @@ export default function Spending({ transactions, budgets, settings, watchlists =
         </Card>
       )}
 
+      {/* Desktop: envelopes/watchlists/budget left, transactions right */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)",
+        gap: isMobile ? 0 : 16,
+        alignItems: "start",
+      }}>
+      <div>
       {/* Envelopes (envelope mode replaces the budget summary) */}
       {envelopes && envelopes.cards.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -779,6 +789,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
         <CategorizeSheet
           transactions={uncategorised}
           categories={knownCategories}
+          subcategoriesByCategory={subcategoriesByCategory}
           initialTx={categorize.initialTx}
           isMock={isMock}
           onSaved={() => { setCategorize(null); refetch(); }}
