@@ -14,7 +14,6 @@ function checkEmails() {
         const emailDate = message.getDate();
 
         let transaction = null;
-
         if (body.includes("Card payment")) {
           transaction = parseDiscoveryEmail(body, emailDate);
         } else if (body.includes("Discovery Pay")) {
@@ -63,7 +62,11 @@ function parseDiscoveryEmail(body, emailDate) {
   const currency = vendorMatch[2].trim().toUpperCase() === "R" ? "ZAR" : vendorMatch[2].trim().toUpperCase();
   const amount   = parseFloat(vendorMatch[3].replace(",", ""));
 
-  return { date, vendor, amount, currency, category: "", subcategory: "" };
+  // "Card ending ***9627" identifies which of the two cards was used.
+  const cardMatch = body.match(/Card ending\s+(\*+\s*\d+)/i);
+  const card = cardMatch ? cardMatch[1].replace(/\s+/g, "") : "";
+
+  return { date, vendor, amount, currency, category: "", subcategory: "", card };
 }
 
 function parseDiscoveryEFT(body, emailDate) {
@@ -322,6 +325,22 @@ function writeToSheet(transaction) {
     transaction.category,
     transaction.subcategory,
   ]);
+
+  // Card lands in its own column (created on first use), keyed by header name
+  // so it's independent of the other columns' positions.
+  if (transaction.card) {
+    sheet.getRange(sheet.getLastRow(), cardColumn(sheet)).setValue(transaction.card);
+  }
+}
+
+// 1-based index of the "Card" header, appended after the last column if absent.
+function cardColumn(sheet) {
+  const header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const idx = header.findIndex(h => String(h).trim().toLowerCase() === "card");
+  if (idx !== -1) return idx + 1;
+  const col = sheet.getLastColumn() + 1;
+  sheet.getRange(1, col).setValue("Card");
+  return col;
 }
 
 // ─── Web app endpoint ─────────────────────────────────────────────────────────

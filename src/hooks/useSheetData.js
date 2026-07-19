@@ -21,20 +21,26 @@ function normalizeDate(raw) {
 // `amount` is always the ZAR-equivalent (Amount ZAR column, falling back to the
 // original amount when blank) so all math is in one currency. The original
 // amount + currency are kept for display only. Income is distinguished by category.
-const parseTransactions = (rows) => rows.slice(1).map(row => {
-  const original = parseFloat(row[2]) || 0;
-  const zar      = parseFloat(row[6]);
-  return {
-    date:           normalizeDate(row[0]),
-    vendor:         row[1] || "",
-    amount:         Number.isFinite(zar) ? zar : original,
-    originalAmount: original,
-    currency:       row[3] || "ZAR",
-    card:           "",
-    category:       row[4] || "Uncategorised",
-    subcategory:    row[5] || "",
-  };
-}).filter(t => t.date);
+const parseTransactions = (rows) => {
+  // Card lives in a header-named column appended by the ingest script; find it
+  // by name so it's independent of the sheet's other columns.
+  const header = rows[0] || [];
+  const cardIdx = header.findIndex(h => String(h).trim().toLowerCase() === "card");
+  return rows.slice(1).map(row => {
+    const original = parseFloat(row[2]) || 0;
+    const zar      = parseFloat(row[6]);
+    return {
+      date:           normalizeDate(row[0]),
+      vendor:         row[1] || "",
+      amount:         Number.isFinite(zar) ? zar : original,
+      originalAmount: original,
+      currency:       row[3] || "ZAR",
+      card:           cardIdx >= 0 ? String(row[cardIdx] || "") : "",
+      category:       row[4] || "Uncategorised",
+      subcategory:    row[5] || "",
+    };
+  }).filter(t => t.date);
+};
 
 const parseBudgets = (rows) => rows.slice(1).reduce((acc, row) => {
   if (row[0]) acc[row[0]] = parseFloat(row[1]) || 0;

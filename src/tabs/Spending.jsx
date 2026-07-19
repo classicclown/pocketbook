@@ -239,6 +239,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   const [query,          setQuery]          = useState("");
   const [filterTag,      setFilterTag]      = useState(null);
   const [filterCurrency, setFilterCurrency] = useState(null);
+  const [filterCard,     setFilterCard]     = useState(null);
   const deferredQuery = useDeferredValue(query);
 
   // Current-month projection (daily run rate, one-offs not extrapolated)
@@ -310,6 +311,11 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     [transactions]
   );
 
+  const cards = useMemo(
+    () => Array.from(new Set(transactions.map(t => t.card).filter(Boolean))).sort(),
+    [transactions]
+  );
+
   // Teach loop: uncategorised transactions + known categories for the picker
   const uncategorised = useMemo(
     () => transactions
@@ -338,7 +344,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, Array.from(v).sort()]));
   }, [transactions]);
 
-  const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency);
+  const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency || filterCard);
 
   const searchResults = useMemo(() => {
     if (!searchActive) return null;
@@ -348,10 +354,11 @@ export default function Spending({ transactions, budgets, settings, watchlists =
         if (q && !`${t.vendor} ${t.category} ${t.subcategory}`.toLowerCase().includes(q)) return false;
         if (filterTag && getTag(t) !== filterTag) return false;
         if (filterCurrency && t.currency !== filterCurrency) return false;
+        if (filterCard && t.card !== filterCard) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [searchActive, deferredQuery, filterTag, filterCurrency, transactions, getTag]);
+  }, [searchActive, deferredQuery, filterTag, filterCurrency, filterCard, transactions, getTag]);
 
   const searchTotal = useMemo(
     () => (searchResults || []).filter(isSpend).reduce((s, t) => s + t.amount, 0),
@@ -362,6 +369,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     setQuery("");
     setFilterTag(null);
     setFilterCurrency(null);
+    setFilterCard(null);
   };
 
   // Envelope view: allocated vs spent per category for the viewed month
@@ -740,6 +748,10 @@ export default function Spending({ transactions, budgets, settings, watchlists =
             {currencies.length > 1 && currencies.map(c => (
               <Chip key={c} label={c} active={filterCurrency === c}
                 onClick={() => setFilterCurrency(filterCurrency === c ? null : c)} />
+            ))}
+            {cards.length > 1 && cards.map(c => (
+              <Chip key={c} label={`Card ${c}`} active={filterCard === c}
+                onClick={() => setFilterCard(filterCard === c ? null : c)} />
             ))}
           </div>
         </div>
