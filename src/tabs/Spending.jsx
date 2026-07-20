@@ -16,6 +16,7 @@ import DetailSheet from "../components/DetailSheet";
 import { CategoryDetail, MerchantDetail } from "../components/InsightDetails";
 import { useTags } from "../hooks/useTags";
 import { projectMonth, isSpend } from "../utils/projection";
+import { detectRecurring } from "../utils/recurring";
 import {
   getMonths, filterByMonth, totalExpenses, sumByCategory, sumByVendor,
   fmt, monthLabel, MONTH_LABELS,
@@ -229,6 +230,8 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
   const [detail,       setDetail]       = useState(null);       // { type: "category"|"vendor", name }
   const [categorize,   setCategorize]   = useState(null);       // false-y | { initialTx? }
+  const [listMode,     setListMode]     = useState("categories"); // "categories" | "all" | "recurring" | <category>
+
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
 
@@ -237,13 +240,12 @@ export default function Spending({ transactions, budgets, settings, watchlists =
 
   // Search & filters
   const [query,          setQuery]          = useState("");
-  const [filterTag,      setFilterTag]      = useState(null);
   const [filterCurrency, setFilterCurrency] = useState(null);
   const [filterCard,     setFilterCard]     = useState(null);
   const deferredQuery = useDeferredValue(query);
 
   // Current-month projection (daily run rate, one-offs not extrapolated)
-  const { getTag, options: tagOptions } = useTags();
+  const { getTag } = useTags();
   const [curYear, curMonth] = currentYM.split("-").map(Number);
   const proj = useMemo(
     () => projectMonth(transactions, { year: curYear, month: curMonth, getTag, fixed }),
@@ -274,17 +276,47 @@ export default function Spending({ transactions, budgets, settings, watchlists =
       .map(([name, total]) => ({ name, total }));
   }, [drillTx, breakdown, selectedMonth]);
 
-  // Transaction grouping
-  const visibleTx = useMemo(() => {
-    const base = selectedMonth ? drillTx : transactions.slice().sort((a, b) => b.date.localeCompare(a.date));
-    return base;
-  }, [selectedMonth, drillTx, transactions]);
+  // The transaction list is scoped to one month — the current month by
+  // default, or whichever month is selected on the chart.
+  const listYM = selectedMonth || currentYM;
+  const monthTx = useMemo(() => {
+    const [y, m] = listYM.split("-").map(Number);
+    return filterByMonth(transactions, y, m).slice().sort((a, b) => b.date.localeCompare(a.date));
+  }, [listYM, transactions]);
+
+  // Currency / card filters narrow the whole list (accordion and flat views).
+  const scopedTx = useMemo(() => monthTx.filter(t => {
+    if (filterCurrency && t.currency !== filterCurrency) return false;
+    if (filterCard && t.card !== filterCard) return false;
+    return true;
+  }), [monthTx, filterCurrency, filterCard]);
+
+  // Vendors that look like recurring subscriptions/bills, for the quick filter.
+  const recurringVendors = useMemo(
+    () => new Set(detectRecurring(transactions).map(r => r.vendor)),
+    [transactions]
+  );
+
+  // Top spending categories in the current scope, offered as quick-filter chips.
+  const topCategories = useMemo(() => {
+    const totals = {};
+    scopedTx.forEach(t => { if (isSpend(t)) totals[t.category] = (totals[t.category] || 0) + t.amount; });
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+  }, [scopedTx]);
+
+  // Flat chronological list for the non-"categories" view modes.
+  const listTx = useMemo(() => {
+    if (listMode === "categories") return [];
+    if (listMode === "all") return scopedTx;
+    if (listMode === "recurring") return scopedTx.filter(t => t.fixed || recurringVendors.has(t.vendor));
+    return scopedTx.filter(t => t.category === listMode);
+  }, [listMode, scopedTx, recurringVendors]);
 
   // Nested Category → Sub-category → vendor transactions, each level totalled
   // and sorted by spend (highest first).
   const categoryTree = useMemo(() => {
     const cats = {};
-    visibleTx.forEach(t => {
+    scopedTx.forEach(t => {
       const catName = t.category || "Uncategorised";
       const subName = (t.subcategory && String(t.subcategory)) || "Other";
       if (!cats[catName]) cats[catName] = { name: catName, total: 0, count: 0, subs: {} };
@@ -304,7 +336,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           .sort((a, b) => b.total - a.total),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [visibleTx]);
+  }, [scopedTx]);
 
   const currencies = useMemo(
     () => Array.from(new Set(transactions.map(t => t.currency))).sort(),
@@ -344,21 +376,22 @@ export default function Spending({ transactions, budgets, settings, watchlists =
     return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, Array.from(v).sort()]));
   }, [transactions]);
 
-  const searchActive = Boolean(deferredQuery.trim() || filterTag || filterCurrency || filterCard);
+  // Typing in the search box searches across ALL months (currency/card still
+  // narrow it); the view-mode chips only apply to the month-scoped list.
+  const searchActive = Boolean(deferredQuery.trim());
 
   const searchResults = useMemo(() => {
     if (!searchActive) return null;
     const q = deferredQuery.trim().toLowerCase();
     return transactions
       .filter(t => {
-        if (q && !`${t.vendor} ${t.category} ${t.subcategory}`.toLowerCase().includes(q)) return false;
-        if (filterTag && getTag(t) !== filterTag) return false;
+        if (!`${t.vendor} ${t.category} ${t.subcategory}`.toLowerCase().includes(q)) return false;
         if (filterCurrency && t.currency !== filterCurrency) return false;
         if (filterCard && t.card !== filterCard) return false;
         return true;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [searchActive, deferredQuery, filterTag, filterCurrency, filterCard, transactions, getTag]);
+  }, [searchActive, deferredQuery, filterCurrency, filterCard, transactions]);
 
   const searchTotal = useMemo(
     () => (searchResults || []).filter(isSpend).reduce((s, t) => s + t.amount, 0),
@@ -367,7 +400,6 @@ export default function Spending({ transactions, budgets, settings, watchlists =
 
   const clearSearch = () => {
     setQuery("");
-    setFilterTag(null);
     setFilterCurrency(null);
     setFilterCard(null);
   };
@@ -618,14 +650,14 @@ export default function Spending({ transactions, budgets, settings, watchlists =
         </Card>
       )}
 
-      {/* Desktop: envelopes/watchlists/budget left, transactions right */}
+      {/* Desktop: transactions 60% left, envelopes/watchlists/budget 40% right */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)",
+        gridTemplateColumns: isMobile ? "1fr" : "minmax(0, 3fr) minmax(0, 2fr)",
         gap: isMobile ? 0 : 16,
         alignItems: "start",
       }}>
-      <div>
+      <div style={{ order: isMobile ? 0 : 2 }}>
       {/* Envelopes (envelope mode replaces the budget summary) */}
       {envelopes && envelopes.cards.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -696,7 +728,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
       </div>
 
       {/* Transaction list */}
-      <div>
+      <div style={{ order: isMobile ? 0 : 1 }}>
       <Card>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>
@@ -706,13 +738,13 @@ export default function Spending({ transactions, budgets, settings, watchlists =
                     {searchResults.length} items · {fmt(searchTotal)} spend
                   </span>
                 </>
-              : <>Transactions{selectedMonth ? ` · ${monthLabel(selectedMonth)}` : ""}
+              : <>Transactions · {monthLabel(listYM)}
                   <span style={{ marginLeft: 6, fontSize: 11, color: T.sub, fontWeight: 400 }}>
-                    {visibleTx.length} items
+                    {(listMode === "categories" ? scopedTx.length : listTx.length)} items
                   </span>
                 </>}
           </div>
-          {searchActive && (
+          {(searchActive || filterCurrency || filterCard) && (
             <button
               onClick={clearSearch}
               style={{
@@ -740,20 +772,31 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               outline: "none",
             }}
           />
+          {/* View-mode chips: how to present the month's transactions */}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            {tagOptions.map(t2 => (
-              <Chip key={t2} label={t2} active={filterTag === t2}
-                onClick={() => setFilterTag(filterTag === t2 ? null : t2)} />
-            ))}
-            {currencies.length > 1 && currencies.map(c => (
-              <Chip key={c} label={c} active={filterCurrency === c}
-                onClick={() => setFilterCurrency(filterCurrency === c ? null : c)} />
-            ))}
-            {cards.length > 1 && cards.map(c => (
-              <Chip key={c} label={`Card ${c}`} active={filterCard === c}
-                onClick={() => setFilterCard(filterCard === c ? null : c)} />
+            <Chip label="Categories" active={listMode === "categories"} onClick={() => setListMode("categories")} />
+            <Chip label="All" active={listMode === "all"} onClick={() => setListMode("all")} />
+            <Chip label="Recurring" active={listMode === "recurring"} onClick={() => setListMode("recurring")} />
+            {(["categories", "all", "recurring"].includes(listMode) || topCategories.includes(listMode)
+              ? topCategories
+              : [listMode, ...topCategories]
+            ).map(c => (
+              <Chip key={c} label={c} active={listMode === c} onClick={() => setListMode(c)} />
             ))}
           </div>
+          {/* Cross-cutting filters */}
+          {(currencies.length > 1 || cards.length > 1) && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              {currencies.length > 1 && currencies.map(c => (
+                <Chip key={c} label={c} active={filterCurrency === c}
+                  onClick={() => setFilterCurrency(filterCurrency === c ? null : c)} />
+              ))}
+              {cards.length > 1 && cards.map(c => (
+                <Chip key={c} label={`Card ${c}`} active={filterCard === c}
+                  onClick={() => setFilterCard(filterCard === c ? null : c)} />
+              ))}
+            </div>
+          )}
         </div>
 
         {searchActive ? (
@@ -770,20 +813,36 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               />
             ))
           )
-        ) : categoryTree.length === 0 ? (
+        ) : listMode === "categories" ? (
+          categoryTree.length === 0 ? (
+            <div style={{ padding: "16px 0", fontSize: 13, color: T.sub, textAlign: "center" }}>
+              No transactions to show.
+            </div>
+          ) : (
+            /* Nested accordion: tap a category to reveal its sub-categories,
+               then a sub-category to reveal the individual vendor transactions. */
+            categoryTree.map(cat => (
+              <CategoryGroup
+                key={cat.name}
+                cat={cat}
+                onInspect={() => setDetail({ type: "category", name: cat.name })}
+                onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
+                onCategorize={(tx) => setCategorize({ initialTx: tx })}
+              />
+            ))
+          )
+        ) : listTx.length === 0 ? (
           <div style={{ padding: "16px 0", fontSize: 13, color: T.sub, textAlign: "center" }}>
             No transactions to show.
           </div>
         ) : (
-          /* Nested accordion: tap a category to reveal its sub-categories,
-             then a sub-category to reveal the individual vendor transactions. */
-          categoryTree.map(cat => (
-            <CategoryGroup
-              key={cat.name}
-              cat={cat}
-              onInspect={() => setDetail({ type: "category", name: cat.name })}
+          /* Flat chronological list for All / Recurring / a single category */
+          listTx.map((tx, i) => (
+            <TransactionRow
+              key={`${tx.date}-${tx.vendor}-${i}`}
+              tx={tx}
               onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
-              onCategorize={(tx) => setCategorize({ initialTx: tx })}
+              onCategorize={(t) => setCategorize({ initialTx: t })}
             />
           ))
         )}
