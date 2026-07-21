@@ -119,6 +119,7 @@ export default function Settings({
 }) {
   const { T, mode, preference, setPreference, setColor, resetPalette, customized } = useTheme();
   const isMobile = useIsMobile();
+  const [subview, setSubview] = useState(null); // null | "palette"
   useTags(); // re-render when tag options change
 
   // ── Budget allocations editor ────────────────────────────────────────────
@@ -295,6 +296,81 @@ export default function Settings({
     width: 110, textAlign: "right", boxSizing: "border-box",
   };
 
+  const backButton = (
+    <button
+      onClick={() => setSubview(null)}
+      style={{
+        fontSize: 12, fontWeight: 600, color: T.sub, background: "none",
+        border: `1px solid ${T.border}`, borderRadius: T.radius, padding: "5px 12px",
+        cursor: "pointer", fontFamily: T.font, marginBottom: 16,
+      }}
+    >
+      ‹ Settings
+    </button>
+  );
+
+  // ── Palette sub-screen ───────────────────────────────────────────────────
+  if (subview === "palette") {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        {backButton}
+        <PageHeader title="Colour Palette" eyebrow={`Customising ${mode} theme`} />
+        <Card>
+          <div style={{ fontSize: 12, color: T.sub, marginBottom: 12 }}>
+            Tap a swatch to recolour the app. Light and dark are customised separately,
+            and saved on this device only.
+          </div>
+          {SWATCHES.map(sw => (
+            <div key={sw.key} style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "8px 0", borderBottom: `1px solid ${T.border}`,
+            }}>
+              <label style={{
+                width: 34, height: 26, borderRadius: T.radiusSm, flexShrink: 0,
+                border: `1px solid ${T.border2}`, overflow: "hidden", cursor: "pointer",
+                position: "relative", background: T[sw.key],
+              }}>
+                <input
+                  type="color"
+                  value={T[sw.key]}
+                  onChange={e => setColor(sw.key, e.target.value)}
+                  style={{
+                    position: "absolute", top: -4, left: -4,
+                    width: "150%", height: "150%", border: "none", padding: 0,
+                    cursor: "pointer", opacity: 0,
+                  }}
+                />
+              </label>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: T.text }}>{sw.label}</div>
+                <div style={{ fontSize: 11, color: T.sub }}>{sw.hint}</div>
+              </div>
+              <span style={{ fontSize: 11, fontFamily: T.mono, color: T.sub }}>
+                {String(T[sw.key]).toUpperCase()}
+              </span>
+            </div>
+          ))}
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={resetPalette}
+              disabled={!customized}
+              style={{
+                fontSize: 12, fontWeight: 600, padding: "6px 14px",
+                borderRadius: T.radius, border: `1px solid ${T.border}`,
+                background: "transparent",
+                color: customized ? T.text : T.sub,
+                cursor: customized ? "pointer" : "default",
+                fontFamily: T.font,
+              }}
+            >
+              Reset to default
+            </button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader title="Settings" />
@@ -333,58 +409,28 @@ export default function Settings({
         </div>
       </Card>
 
-      {/* Palette */}
-      <Card>
-        <SectionHeader right={`Customising ${mode} theme`}>Palette</SectionHeader>
-        <div style={{ fontSize: 11, color: T.sub, marginBottom: 12 }}>
-          Tap a swatch to recolour the app. Light and dark are customised separately,
-          and saved on this device only.
-        </div>
-        {SWATCHES.map(sw => (
-          <div key={sw.key} style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "8px 0", borderBottom: `1px solid ${T.border}`,
-          }}>
-            <label style={{
-              width: 34, height: 26, borderRadius: T.radiusSm, flexShrink: 0,
-              border: `1px solid ${T.border2}`, overflow: "hidden", cursor: "pointer",
-              position: "relative", background: T[sw.key],
-            }}>
-              <input
-                type="color"
-                value={T[sw.key]}
-                onChange={e => setColor(sw.key, e.target.value)}
-                style={{
-                  position: "absolute", top: -4, left: -4,
-                  width: "150%", height: "150%", border: "none", padding: 0,
-                  cursor: "pointer", opacity: 0,
-                }}
-              />
-            </label>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, color: T.text }}>{sw.label}</div>
-              <div style={{ fontSize: 11, color: T.sub }}>{sw.hint}</div>
-            </div>
-            <span style={{ fontSize: 11, fontFamily: T.mono, color: T.sub }}>
-              {String(T[sw.key]).toUpperCase()}
-            </span>
+      {/* Palette — opens its own sub-screen */}
+      <Card
+        onClick={() => setSubview("palette")}
+        style={{ cursor: "pointer" }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Preview of the current accent / positive / negative swatches */}
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            {["accent", "green", "red"].map(k => (
+              <span key={k} style={{
+                width: 16, height: 16, borderRadius: 4,
+                background: T[k], border: `1px solid ${T.border2}`,
+              }} />
+            ))}
           </div>
-        ))}
-        <div style={{ marginTop: 12 }}>
-          <button
-            onClick={resetPalette}
-            disabled={!customized}
-            style={{
-              fontSize: 12, fontWeight: 600, padding: "6px 14px",
-              borderRadius: T.radius, border: `1px solid ${T.border}`,
-              background: "transparent",
-              color: customized ? T.text : T.sub,
-              cursor: customized ? "pointer" : "default",
-              fontFamily: T.font,
-            }}
-          >
-            Reset to default
-          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Colour Palette</div>
+            <div style={{ fontSize: 11, color: T.sub, marginTop: 2 }}>
+              {customized ? "Customised" : "Default"} · accent, background, outlines & more
+            </div>
+          </div>
+          <span style={{ fontSize: 18, color: T.sub, flexShrink: 0 }}>›</span>
         </div>
       </Card>
 
