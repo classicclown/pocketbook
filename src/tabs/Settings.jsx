@@ -14,6 +14,16 @@ const THEME_CHOICES = [
   { value: "dark",   label: "Dark" },
 ];
 
+// Editable palette swatches → the theme token each controls.
+const SWATCHES = [
+  { key: "accent",  label: "Accent",     hint: "Bars, buttons & highlights" },
+  { key: "bg",      label: "Background",  hint: "Page background" },
+  { key: "surface", label: "Cards",       hint: "Card & panel background" },
+  { key: "border",  label: "Outlines",    hint: "Borders & dividers" },
+  { key: "green",   label: "Positive",    hint: "Savings & gains" },
+  { key: "red",     label: "Negative",    hint: "Over-budget & losses" },
+];
+
 function Segmented({ options, value, onChange }) {
   const { T } = useTheme();
   return (
@@ -107,7 +117,7 @@ export default function Settings({
   transactions, budgets, settings, goals, watchlists, fixed,
   saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
 }) {
-  const { T, preference, setPreference } = useTheme();
+  const { T, mode, preference, setPreference, setColor, resetPalette, customized } = useTheme();
   const isMobile = useIsMobile();
   useTags(); // re-render when tag options change
 
@@ -320,6 +330,61 @@ export default function Settings({
             <SaveStatus status={stackedStatus} />
             <Toggle checked={settings.stackedChart} onChange={handleStackedToggle} disabled={isMock} />
           </div>
+        </div>
+      </Card>
+
+      {/* Palette */}
+      <Card>
+        <SectionHeader right={`Customising ${mode} theme`}>Palette</SectionHeader>
+        <div style={{ fontSize: 11, color: T.sub, marginBottom: 12 }}>
+          Tap a swatch to recolour the app. Light and dark are customised separately,
+          and saved on this device only.
+        </div>
+        {SWATCHES.map(sw => (
+          <div key={sw.key} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "8px 0", borderBottom: `1px solid ${T.border}`,
+          }}>
+            <label style={{
+              width: 34, height: 26, borderRadius: T.radiusSm, flexShrink: 0,
+              border: `1px solid ${T.border2}`, overflow: "hidden", cursor: "pointer",
+              position: "relative", background: T[sw.key],
+            }}>
+              <input
+                type="color"
+                value={T[sw.key]}
+                onChange={e => setColor(sw.key, e.target.value)}
+                style={{
+                  position: "absolute", top: -4, left: -4,
+                  width: "150%", height: "150%", border: "none", padding: 0,
+                  cursor: "pointer", opacity: 0,
+                }}
+              />
+            </label>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: T.text }}>{sw.label}</div>
+              <div style={{ fontSize: 11, color: T.sub }}>{sw.hint}</div>
+            </div>
+            <span style={{ fontSize: 11, fontFamily: T.mono, color: T.sub }}>
+              {String(T[sw.key]).toUpperCase()}
+            </span>
+          </div>
+        ))}
+        <div style={{ marginTop: 12 }}>
+          <button
+            onClick={resetPalette}
+            disabled={!customized}
+            style={{
+              fontSize: 12, fontWeight: 600, padding: "6px 14px",
+              borderRadius: T.radius, border: `1px solid ${T.border}`,
+              background: "transparent",
+              color: customized ? T.text : T.sub,
+              cursor: customized ? "pointer" : "default",
+              fontFamily: T.font,
+            }}
+          >
+            Reset to default
+          </button>
         </div>
       </Card>
 
