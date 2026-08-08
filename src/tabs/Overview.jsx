@@ -8,6 +8,10 @@ import StatCard from "../components/StatCard";
 import CustomTooltip from "../components/CustomTooltip";
 import PageHeader from "../components/PageHeader";
 import SectionHeader from "../components/SectionHeader";
+import DetailSheet from "../components/DetailSheet";
+import TileFrame from "../components/TileFrame";
+import CustomTile from "../components/CustomTile";
+import TileBuilder from "../components/TileBuilder";
 import { useChartDefaults } from "../theme/chart";
 import {
   filterByMonth, totalExpenses, sumByCategory,
@@ -16,8 +20,8 @@ import {
 import { projectMonth } from "../utils/projection";
 import { useTags } from "../hooks/useTags";
 import { detectRecurring, upcomingRecurringTotal, excludeRecurringVendor } from "../utils/recurring";
-import { useCardLayout } from "../hooks/useCardLayout";
-import MovableCard from "../components/MovableCard";
+import { useDashboard } from "../hooks/useDashboard";
+import { describeTile } from "../utils/tiles";
 
 function greeting() {
   const h = new Date().getHours();
@@ -26,19 +30,17 @@ function greeting() {
   return "Good evening";
 }
 
-const DEFAULT_LAYOUT = {
-  left:  ["leftToSpend", "savingsRate", "projected", "chart6mo"],
-  right: ["budgetVsActual", "recurring"],
-};
-
-const CARD_LABELS = {
-  leftToSpend:    "Left to Spend",
-  savingsRate:    "Savings Rate",
-  projected:      "Projected Spend",
-  chart6mo:       "6-Month Spending",
-  budgetVsActual: "Budget vs Actual",
-  recurring:      "Recurring",
-};
+// Built-in tiles offered in the "Add a tile" picker, with their default width.
+const BUILTINS = [
+  { id: "netWorth",       label: "Net Worth",        size: "full" },
+  { id: "summary",        label: "Monthly Summary",  size: "full" },
+  { id: "leftToSpend",    label: "Left to Spend",    size: "half" },
+  { id: "savingsRate",    label: "Savings Rate",     size: "half" },
+  { id: "projected",      label: "Projected Spend",  size: "half" },
+  { id: "chart6mo",       label: "6-Month Spending", size: "half" },
+  { id: "budgetVsActual", label: "Budget vs Actual", size: "half" },
+  { id: "recurring",      label: "Recurring",        size: "half" },
+];
 
 export default function Overview({ transactions, budgets, assets, fixed = [], investments = [] }) {
   const { T } = useTheme();
@@ -85,7 +87,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
   }, [transactions, nowYear, nowMonth]);
 
   // Projected spend — daily run rate extrapolated to month-end, one-offs excluded
-  const { getTag } = useTags();
+  const { getTag, options: tagOptions } = useTags();
   const proj = useMemo(
     () => projectMonth(transactions, { year: nowYear, month: nowMonth, getTag, fixed }),
     [transactions, nowYear, nowMonth, getTag, fixed]
@@ -116,9 +118,25 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
 
   const currentYM = `${nowYear}-${String(nowMonth).padStart(2, "0")}`;
 
-  // Movable card layout (desktop edit mode; mobile renders the flat order)
-  const { layout, flat, moveVertical, moveAcross, reset } = useCardLayout("pb:overviewLayout", DEFAULT_LAYOUT);
+  // Data-source options for the custom-tile builder
+  const categoryNames = useMemo(
+    () => Array.from(new Set([...Object.keys(budgets), ...transactions.map(t => t.category)]
+      .filter(c => c && c !== "Uncategorised" && c !== "Transfer"))).sort(),
+    [budgets, transactions]
+  );
+  const vendorNames = useMemo(
+    () => Array.from(new Set(transactions.map(t => t.vendor).filter(Boolean))).sort(),
+    [transactions]
+  );
+
+  // Dashboard state
+  const { items, custom, add, remove, move, setSize, saveCustom, reset } = useDashboard("pb:dashboard");
   const [editing, setEditing] = useState(false);
+  const [picker, setPicker]   = useState(false);
+  const [builder, setBuilder] = useState(null); // null | { edit?: def }
+
+  const onBoard = new Set(items.map(it => it.id));
+  const availableBuiltins = BUILTINS.filter(b => !onBoard.has(b.id));
 
   const editButtonStyle = {
     fontSize: 12, fontWeight: 600, padding: "5px 12px",
@@ -127,7 +145,48 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
     cursor: "pointer", fontFamily: T.font,
   };
 
-  const cards = {
+  // ── Built-in tile content ──────────────────────────────────────────────────
+  const builtinContent = {
+    netWorth: (
+      <div style={{ background: T.heroBg, borderRadius: T.radius, padding: "20px 24px" }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: T.heroSub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
+          Net Worth
+        </div>
+        <div style={{ fontSize: 38, fontWeight: 700, fontFamily: T.mono, color: T.heroText, marginBottom: 12, lineHeight: 1 }}>
+          {fmt(netWorth)}
+        </div>
+        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+          <div>
+            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Assets</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalAssets)}</span>
+          </div>
+          <div>
+            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Liabilities</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalLiabilities)}</span>
+          </div>
+          {investmentsTotal > 0 && (
+            <div>
+              <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Investments</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(investmentsTotal)}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    ),
+
+    summary: (
+      <div style={{ display: "flex", gap: 8 }}>
+        <StatCard label="Income" value={fmt(income)}
+          subValue={income === 0 ? "No income recorded" : "this month"} subColor={T.sub} />
+        <StatCard label="Spent" value={fmt(spent)}
+          subValue={prevSpent > 0 ? `${spentDelta > 0 ? "+" : ""}${spentDelta.toFixed(0)}% vs last month` : "no prior data"}
+          subColor={spentDelta > 10 ? T.red : spentDelta < -5 ? T.green : T.sub} />
+        <StatCard label="Saved" value={fmt(Math.max(0, saved))}
+          subValue={income > 0 ? `${savingsRate.toFixed(0)}% savings rate` : "—"}
+          subColor={savingsRate >= 30 ? T.green : savingsRate >= 15 ? T.yellow : T.red} />
+      </div>
+    ),
+
     leftToSpend: (
       <Card style={{ marginBottom: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 8 }}>
@@ -162,10 +221,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <div style={{ flex: 1, background: T.dim, height: 4, position: "relative" }}>
             <div style={{ width: `${Math.min(100, savingsRate)}%`, height: 4, background: T.green }} />
-            {/* Target marker at 30% */}
-            <div style={{
-              position: "absolute", left: "30%", top: -3, width: 1, height: 10, background: T.border2,
-            }} />
+            <div style={{ position: "absolute", left: "30%", top: -3, width: 1, height: 10, background: T.border2 }} />
           </div>
           <div style={{ fontSize: 10, color: T.sub, whiteSpace: "nowrap" }}>30% target</div>
         </div>
@@ -226,9 +282,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
           const pct    = limit > 0 ? (actual / limit) * 100 : 0;
           const over   = actual > limit;
           const catProjected = proj.byCategory[cat]?.projected;
-          const projMarker = limit > 0 && catProjected > actual
-            ? (catProjected / limit) * 100
-            : null;
+          const projMarker = limit > 0 && catProjected > actual ? (catProjected / limit) * 100 : null;
           return (
             <div key={cat} style={{ marginBottom: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
@@ -245,12 +299,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
                   </span>
                 </div>
               </div>
-              <ProgressBar
-                value={pct}
-                color={over ? T.red : `${T.accent}B3`}
-                height={3}
-                marker={projMarker}
-              />
+              <ProgressBar value={pct} color={over ? T.red : `${T.accent}B3`} height={3} marker={projMarker} />
             </div>
           );
         })}
@@ -291,10 +340,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
                 <button
                   onClick={() => dismissRecurring(r.vendor)}
                   title="Not recurring — hide"
-                  style={{
-                    background: "none", border: "none", color: T.sub,
-                    cursor: "pointer", fontSize: 11, padding: 2, lineHeight: 1,
-                  }}
+                  style={{ background: "none", border: "none", color: T.sub, cursor: "pointer", fontSize: 11, padding: 2, lineHeight: 1 }}
                 >
                   ✕
                 </button>
@@ -306,111 +352,145 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
     ),
   };
 
-  const renderCard = (id, column) => {
-    const col = layout[column];
-    const i = col.indexOf(id);
-    return (
-      <MovableCard
-        key={id}
-        editing={editing}
-        label={CARD_LABELS[id]}
-        column={column}
-        canUp={i > 0}
-        canDown={i < col.length - 1}
-        onUp={() => moveVertical(id, -1)}
-        onDown={() => moveVertical(id, 1)}
-        onAcross={() => moveAcross(id)}
-      >
-        {cards[id]}
-      </MovableCard>
-    );
+  const tileLabel = (id) => {
+    const b = BUILTINS.find(x => x.id === id);
+    if (b) return b.label;
+    const d = custom[id];
+    return d ? (d.title || describeTile(d)) : id;
   };
+
+  const tileNode = (id) => {
+    if (builtinContent[id]) return builtinContent[id];
+    if (custom[id]) return <CustomTile def={custom[id]} transactions={transactions} />;
+    return null; // stale id — skip
+  };
+
+  const openPicker = () => { setEditing(true); setPicker(true); };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
         <PageHeader eyebrow={monthLabel(currentYM)} title={`${greeting()}, Ryan`} />
-        {!isMobile && (
-          <div style={{ display: "flex", gap: 6, paddingTop: 4 }}>
-            {editing && (
-              <button onClick={reset} style={editButtonStyle}>Reset</button>
-            )}
+        <div style={{ display: "flex", gap: 6, paddingTop: 4, flexWrap: "wrap" }}>
+          {editing && (
+            <button onClick={() => setPicker(true)} style={{ ...editButtonStyle, borderColor: T.accent, color: T.accent, background: T.accentBg }}>
+              ＋ Add tile
+            </button>
+          )}
+          {editing && items.length > 0 && (
+            <button onClick={() => { if (window.confirm("Clear your whole dashboard?")) reset(); }} style={editButtonStyle}>
+              Reset
+            </button>
+          )}
+          <button
+            onClick={() => setEditing(e => !e)}
+            style={editing ? { ...editButtonStyle, borderColor: T.accent, color: T.accent, background: T.accentBg } : editButtonStyle}
+          >
+            {editing ? "Done" : "Edit"}
+          </button>
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <Card>
+          <div style={{ textAlign: "center", padding: "36px 16px" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>Your dashboard is empty</div>
+            <div style={{ fontSize: 12, color: T.sub, marginBottom: 18, maxWidth: 360, marginLeft: "auto", marginRight: "auto" }}>
+              Build your home page from built-in widgets — net worth, spending, budgets — or create your own custom metric tiles.
+            </div>
             <button
-              onClick={() => setEditing(e => !e)}
-              style={editing ? { ...editButtonStyle, borderColor: T.accent, color: T.accent, background: T.accentBg } : editButtonStyle}
+              onClick={openPicker}
+              style={{
+                fontSize: 13, fontWeight: 600, padding: "9px 20px", borderRadius: T.radius,
+                border: "none", background: T.accent, color: "#fff", cursor: "pointer", fontFamily: T.font,
+              }}
             >
-              {editing ? "Done" : "Edit layout"}
+              ＋ Add a tile
             </button>
           </div>
-        )}
-      </div>
-
-      {/* Net Worth Banner */}
-      <div style={{
-        background: T.heroBg,
-        borderRadius: T.radius,
-        padding: "20px 24px",
-        marginBottom: 12,
-      }}>
-        <div style={{ fontSize: 11, fontWeight: 600, color: T.heroSub, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>
-          Net Worth
-        </div>
-        <div style={{ fontSize: 38, fontWeight: 700, fontFamily: T.mono, color: T.heroText, marginBottom: 12, lineHeight: 1 }}>
-          {fmt(netWorth)}
-        </div>
-        <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-          <div>
-            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Assets</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalAssets)}</span>
-          </div>
-          <div>
-            <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Liabilities</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(totalLiabilities)}</span>
-          </div>
-          {investmentsTotal > 0 && (
-            <div>
-              <span style={{ fontSize: 11, color: T.heroFaint, marginRight: 6 }}>Investments</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: T.heroText, fontFamily: T.mono }}>{fmt(investmentsTotal)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Stats Row */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <StatCard
-          label="Income"
-          value={fmt(income)}
-          subValue={income === 0 ? "No income recorded" : "this month"}
-          subColor={T.sub}
-        />
-        <StatCard
-          label="Spent"
-          value={fmt(spent)}
-          subValue={prevSpent > 0 ? `${spentDelta > 0 ? "+" : ""}${spentDelta.toFixed(0)}% vs last month` : "no prior data"}
-          subColor={spentDelta > 10 ? T.red : spentDelta < -5 ? T.green : T.sub}
-        />
-        <StatCard
-          label="Saved"
-          value={fmt(Math.max(0, saved))}
-          subValue={income > 0 ? `${savingsRate.toFixed(0)}% savings rate` : "—"}
-          subColor={savingsRate >= 30 ? T.green : savingsRate >= 15 ? T.yellow : T.red}
-        />
-      </div>
-
-      {isMobile ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {flat.map(id => <div key={id}>{cards[id]}</div>)}
-        </div>
+        </Card>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "start" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {layout.left.map(id => renderCard(id, "left"))}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {layout.right.map(id => renderCard(id, "right"))}
-          </div>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+          gap: 12, alignItems: "start",
+        }}>
+          {items.map((it, i) => {
+            const node = tileNode(it.id);
+            if (!node) return null;
+            const full = isMobile || it.size === "full";
+            return (
+              <div key={it.id} style={{ gridColumn: full ? "1 / -1" : "auto" }}>
+                <TileFrame
+                  editing={editing}
+                  label={tileLabel(it.id)}
+                  size={it.size}
+                  canUp={i > 0}
+                  canDown={i < items.length - 1}
+                  onUp={() => move(it.id, -1)}
+                  onDown={() => move(it.id, 1)}
+                  onToggleSize={() => setSize(it.id, it.size === "full" ? "half" : "full")}
+                  onRemove={() => remove(it.id)}
+                  onEdit={it.id.startsWith("custom:") ? () => setBuilder({ edit: custom[it.id] }) : undefined}
+                >
+                  {node}
+                </TileFrame>
+              </div>
+            );
+          })}
         </div>
+      )}
+
+      {/* Add-tile picker */}
+      {picker && (
+        <DetailSheet title="Add a tile" subtitle="Choose a widget or build your own" onClose={() => setPicker(false)}>
+          {availableBuiltins.length === 0 ? (
+            <div style={{ fontSize: 12, color: T.sub, marginBottom: 12 }}>
+              All built-in tiles are on your dashboard.
+            </div>
+          ) : (
+            availableBuiltins.map(b => (
+              <div key={b.id} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                padding: "10px 0", borderBottom: `1px solid ${T.border}`, gap: 12,
+              }}>
+                <span style={{ fontSize: 13, color: T.text }}>{b.label}</span>
+                <button
+                  onClick={() => add(b.id, b.size)}
+                  style={{
+                    fontSize: 12, fontWeight: 600, padding: "5px 14px", borderRadius: T.radius,
+                    border: `1px solid ${T.accent}`, background: T.accentBg, color: T.accent,
+                    cursor: "pointer", fontFamily: T.font,
+                  }}
+                >
+                  Add
+                </button>
+              </div>
+            ))
+          )}
+          <button
+            onClick={() => { setPicker(false); setBuilder({}); }}
+            style={{
+              marginTop: 14, fontSize: 13, fontWeight: 600, padding: "9px 14px", width: "100%",
+              borderRadius: T.radius, border: `1px dashed ${T.border2}`,
+              background: "transparent", color: T.text, cursor: "pointer", fontFamily: T.font,
+            }}
+          >
+            ＋ Create custom tile
+          </button>
+        </DetailSheet>
+      )}
+
+      {/* Custom-tile builder */}
+      {builder && (
+        <TileBuilder
+          initial={builder.edit}
+          categories={categoryNames}
+          vendors={vendorNames}
+          tags={tagOptions}
+          onSave={(def) => { saveCustom(def); setBuilder(null); }}
+          onClose={() => setBuilder(null)}
+        />
       )}
     </div>
   );
