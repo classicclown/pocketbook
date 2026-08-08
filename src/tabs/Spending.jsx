@@ -13,8 +13,10 @@ import { useChartDefaults } from "../theme/chart";
 import EnvelopeCard from "../components/EnvelopeCard";
 import CategorizeSheet from "../components/CategorizeSheet";
 import DetailSheet from "../components/DetailSheet";
+import SplitSheet from "../components/SplitSheet";
 import { CategoryDetail, MerchantDetail } from "../components/InsightDetails";
 import { useTags } from "../hooks/useTags";
+import { useSplits, splitId } from "../hooks/useSplits";
 import { projectMonth, isSpend } from "../utils/projection";
 import { detectRecurring } from "../utils/recurring";
 import {
@@ -22,13 +24,18 @@ import {
   fmt, monthLabel, MONTH_LABELS,
 } from "../utils/compute";
 
-function TransactionRow({ tx, onInspectVendor, onCategorize }) {
+function TransactionRow({ tx, onInspectVendor, onCategorize, onSplit }) {
   const { T } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const { getTag, setTag, options: tagOptions } = useTags();
   const tag   = getTag(tx);
   const isIncome  = tx.category === "Income";
   const isUSD     = tx.currency === "USD";
+  const isReimbursement = Boolean(tx._reimbursement);
+  const isSplit   = Boolean(tx._split);
+  // A real, splittable expense (not income, transfer, reimbursement or synthetic fixed).
+  const splittable = onSplit && !isIncome && !isReimbursement && !tx.fixed
+    && tx.category !== "Transfer" && (tx._split ? tx._split.original : tx.amount) > 0;
 
   return (
     <div>
@@ -79,15 +86,37 @@ function TransactionRow({ tx, onInspectVendor, onCategorize }) {
                   padding: "1px 5px", borderRadius: 2,
                 }}>{tag}</span>
               )}
+              {isSplit && (
+                <span style={{
+                  marginLeft: 6,
+                  fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                  background: T.accentBg, color: T.accent,
+                  padding: "1px 5px", borderRadius: 2,
+                }}>Split</span>
+              )}
+              {isReimbursement && (
+                <span style={{
+                  marginLeft: 6,
+                  fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                  background: T.dim, color: T.sub, border: `1px solid ${T.border2}`,
+                  padding: "0px 5px", borderRadius: 2,
+                }}>Reimbursement</span>
+              )}
             </div>
           </div>
         </div>
-        <div style={{
-          fontSize: 14, fontWeight: 700, fontFamily: T.mono,
-          color: isIncome ? T.green : T.text,
-          flexShrink: 0,
-        }}>
-          {isIncome ? "+" : ""}{fmt(tx.originalAmount ?? tx.amount, tx.currency)}
+        <div style={{ flexShrink: 0, textAlign: "right" }}>
+          <div style={{
+            fontSize: 14, fontWeight: 700, fontFamily: T.mono,
+            color: isIncome ? T.green : isReimbursement ? T.sub : T.text,
+          }}>
+            {isIncome ? "+" : ""}{fmt(tx.originalAmount ?? tx.amount, tx.currency)}
+          </div>
+          {isSplit && (
+            <div style={{ fontSize: 10, fontFamily: T.mono, color: T.sub, textDecoration: "line-through" }}>
+              {fmt(tx._split.original)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -97,18 +126,39 @@ function TransactionRow({ tx, onInspectVendor, onCategorize }) {
             {tx.subcategory && <span>Subcategory: <strong style={{ color: T.text }}>{tx.subcategory}</strong></span>}
             {tx.card && <span>Card: <strong style={{ color: T.text }}>{tx.card}</strong></span>}
           </div>
-          {onCategorize && (!tx.category || tx.category === "Uncategorised") && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onCategorize(tx); }}
-              style={{
-                fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: T.radiusSm,
-                border: `1px dashed ${T.accent}`, background: "transparent",
-                color: T.accent, cursor: "pointer", fontFamily: T.font, marginBottom: 10,
-              }}
-            >
-              Categorise this vendor…
-            </button>
+          {(tx._split || tx._reimbursement) && (
+            <div style={{ fontSize: 11, color: T.sub, marginBottom: 10 }}>
+              {tx._split
+                ? `Your share of ${fmt(tx._split.original)} — counts as ${fmt(tx._split.effective)} spend`
+                : `Reimbursement of ${fmt(tx._reimbursement.amount)} — netted against a linked expense`}
+            </div>
           )}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {onCategorize && (!tx.category || tx.category === "Uncategorised") && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onCategorize(tx); }}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: T.radiusSm,
+                  border: `1px dashed ${T.accent}`, background: "transparent",
+                  color: T.accent, cursor: "pointer", fontFamily: T.font,
+                }}
+              >
+                Categorise this vendor…
+              </button>
+            )}
+            {splittable && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onSplit(tx); }}
+                style={{
+                  fontSize: 11, fontWeight: 600, padding: "4px 10px", borderRadius: T.radiusSm,
+                  border: `1px dashed ${T.accent}`, background: "transparent",
+                  color: T.accent, cursor: "pointer", fontFamily: T.font,
+                }}
+              >
+                {tx._split ? "Edit split…" : "Split / reimbursed…"}
+              </button>
+            )}
+          </div>
           <div style={{ fontSize: 11, fontWeight: 600, color: T.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Tag</div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {tagOptions.map(t2 => {
@@ -183,7 +233,7 @@ function GroupHeader({ label, total, count, depth, open, onClick, onLabelClick }
 }
 
 // Level 2: a sub-category. Expands to reveal the individual vendor transactions.
-function SubGroup({ sub, onInspectVendor, onCategorize }) {
+function SubGroup({ sub, onInspectVendor, onCategorize, onSplit }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -191,7 +241,7 @@ function SubGroup({ sub, onInspectVendor, onCategorize }) {
       {open && (
         <div style={{ paddingLeft: 16 }}>
           {sub.items.map((tx, i) => (
-            <TransactionRow key={i} tx={tx} onInspectVendor={onInspectVendor} onCategorize={onCategorize} />
+            <TransactionRow key={i} tx={tx} onInspectVendor={onInspectVendor} onCategorize={onCategorize} onSplit={onSplit} />
           ))}
         </div>
       )}
@@ -201,7 +251,7 @@ function SubGroup({ sub, onInspectVendor, onCategorize }) {
 
 // Level 1: a category. Expands to reveal its sub-categories; the label itself
 // opens the category insight panel.
-function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize }) {
+function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize, onSplit }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -213,7 +263,7 @@ function CategoryGroup({ cat, onInspect, onInspectVendor, onCategorize }) {
       {open && (
         <div style={{ paddingLeft: 16 }}>
           {cat.subs.map(sub => (
-            <SubGroup key={sub.name} sub={sub} onInspectVendor={onInspectVendor} onCategorize={onCategorize} />
+            <SubGroup key={sub.name} sub={sub} onInspectVendor={onInspectVendor} onCategorize={onCategorize} onSplit={onSplit} />
           ))}
         </div>
       )}
@@ -230,7 +280,9 @@ export default function Spending({ transactions, budgets, settings, watchlists =
   const [breakdown,    setBreakdown]    = useState("category"); // "category" | "vendor"
   const [detail,       setDetail]       = useState(null);       // { type: "category"|"vendor", name }
   const [categorize,   setCategorize]   = useState(null);       // false-y | { initialTx? }
+  const [splitTx,      setSplitTx]      = useState(null);       // false-y | expense tx being split
   const [listMode,     setListMode]     = useState("categories"); // "categories" | "all" | "recurring" | <category>
+  const { splits, setSplit, removeSplit } = useSplits();
 
 
   const months = useMemo(() => getMonths(transactions), [transactions]);
@@ -810,6 +862,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
                 key={`${tx.date}-${tx.vendor}-${i}`}
                 tx={tx}
                 onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
+                onSplit={setSplitTx}
               />
             ))
           )
@@ -828,6 +881,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
                 onInspect={() => setDetail({ type: "category", name: cat.name })}
                 onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
                 onCategorize={(tx) => setCategorize({ initialTx: tx })}
+                onSplit={setSplitTx}
               />
             ))
           )
@@ -843,6 +897,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               tx={tx}
               onInspectVendor={(vendor) => setDetail({ type: "vendor", name: vendor })}
               onCategorize={(t) => setCategorize({ initialTx: t })}
+              onSplit={setSplitTx}
             />
           ))
         )}
@@ -865,6 +920,18 @@ export default function Spending({ transactions, budgets, settings, watchlists =
           isMock={isMock}
           onSaved={() => { setCategorize(null); refetch(); }}
           onClose={() => setCategorize(null)}
+        />
+      )}
+
+      {/* Shared-purchase / reimbursement split */}
+      {splitTx && (
+        <SplitSheet
+          tx={splitTx}
+          transactions={transactions}
+          def={splits[splitId(splitTx)]}
+          onSave={(d) => { setSplit(splitId(splitTx), d); setSplitTx(null); }}
+          onRemove={() => { removeSplit(splitId(splitTx)); setSplitTx(null); }}
+          onClose={() => setSplitTx(null)}
         />
       )}
 

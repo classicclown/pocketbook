@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
 import { mergeFixed } from "./utils/fixed";
+import { applySplits } from "./utils/splits";
+import { useSplits } from "./hooks/useSplits";
 import { useTheme } from "./theme/ThemeContext";
 import Layout from "./components/Layout";
 import Overview from "./tabs/Overview";
@@ -58,8 +60,14 @@ export default function App() {
     loading, error, refetch, saveSetting, saveBudgets, saveGoals, saveWatchlists, saveFixed, isMock,
   } = useSheetData();
 
-  // Fixed expenses are synthesized into the card transaction stream once here
-  const allTransactions = useMemo(() => mergeFixed(transactions, fixed), [transactions, fixed]);
+  // Fixed expenses are synthesized into the card transaction stream once here,
+  // then the device-local split overlay nets shared purchases / reimbursements
+  // so every tab downstream sees your real share, not the full charge.
+  const { splits } = useSplits();
+  const allTransactions = useMemo(
+    () => applySplits(mergeFixed(transactions, fixed), splits),
+    [transactions, fixed, splits]
+  );
 
   const tabProps = {
     transactions: allTransactions,
