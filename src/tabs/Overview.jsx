@@ -261,7 +261,7 @@ export default function Overview({ transactions, budgets, assets, fixed = [], in
           <BarChart data={last6} barSize={28} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
             <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
             <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={false} />
             <Bar dataKey="total" radius={[2, 2, 0, 0]}>
               {last6.map((entry, i) => (
                 <Cell key={i} fill={entry.ym === currentYM ? T.accent : T.chartMuted} />

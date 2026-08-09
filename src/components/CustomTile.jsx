@@ -83,7 +83,7 @@ export default function CustomTile({ def, transactions }) {
           <ResponsiveContainer width="100%" height={120}>
             <BarChart data={series} barSize={22} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
               <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip />} cursor={false} />
               <Bar dataKey="value" radius={[2, 2, 0, 0]}>
                 {series.map((entry, i) => (
                   <Cell key={i} fill={i === series.length - 1 ? T.accent : T.chartMuted} />

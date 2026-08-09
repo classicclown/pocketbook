@@ -208,7 +208,7 @@ export default function Analysis({ transactions }) {
               axisLine={chart.axisLine} tickLine={chart.tickLine}
             />
             <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={false} />
             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
             {selectedYMs.map((ym, i) => (
               <Bar

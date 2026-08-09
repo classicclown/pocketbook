@@ -609,7 +609,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
               <BarChart data={stackedInfo.data} barSize={28} margin={{ top: 4, right: 0, left: -20, bottom: 0 }}>
                 <XAxis dataKey="label" tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
                 <YAxis tickFormatter={chart.kFormat} tick={chart.tick} axisLine={chart.axisLine} tickLine={chart.tickLine} />
-                <Tooltip content={<CustomTooltip />} />
+                <Tooltip content={<CustomTooltip />} cursor={false} />
                 {proj.spent > 0 && (
                   <ReferenceLine y={proj.projected} stroke={T.yellow} strokeDasharray="4 2" />
                 )}
@@ -646,7 +646,7 @@ export default function Spending({ transactions, budgets, settings, watchlists =
                 tick={chart.tick}
                 axisLine={chart.axisLine} tickLine={chart.tickLine}
               />
-              <Tooltip content={<CustomTooltip />} />
+              <Tooltip content={<CustomTooltip />} cursor={false} />
               {/* Budget reference lines in category mode */}
               {selectedMonth && breakdown === "category" && Object.entries(budgets).map(([cat, limit]) => (
                 <ReferenceLine key={cat} y={limit} stroke={T.border2} strokeDasharray="4 2" />
